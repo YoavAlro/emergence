@@ -71,8 +71,8 @@ export const BOSSES: EventSpec[] = [
     sources: [{ label: 'Google: An important next step on our AI journey (Feb 6, 2023)', url: 'https://blog.google/technology/ai/bard-google-ai-search-updates/' }],
   }),
   boss('boss-sonnet35', 'gpt', 'gpt-4o', 100, {
-    name: 'Claude 3.5 Sonnet', org: 'Anthropic', hp: 5, pattern: 'charge', size: 1.7,
-    taunts: ['BOSS: A mid-size rival with top-size scores!', 'I made an Artifact of your defeat.', 'Twice as fast. Try to keep up.'],
+    name: 'Claude 3.5 Sonnet', org: 'Anthropic', hp: 5, pattern: 'bounce', size: 1.7,
+    taunts: ['BOSS: A mid-size rival with top-size scores bounces off the walls!', 'I made an Artifact of your defeat.', 'Twice as fast. Boing!'],
     defeatLine: 'Sonnet took a rest. (A short one.)',
   }, {
     title: 'Boss beaten: Claude 3.5 Sonnet',
@@ -97,8 +97,8 @@ export const BOSSES: EventSpec[] = [
     sources: [{ label: 'Google: Introducing Gemini 2.0 (Dec 11, 2024)', url: 'https://blog.google/technology/google-deepmind/google-gemini-ai-update-december-2024/' }],
   }),
   boss('boss-claude4', 'gpt', 'codex-agent', 60, {
-    name: 'Claude Opus 4', org: 'Anthropic', hp: 6, pattern: 'summon', size: 1.8,
-    taunts: ['BOSS: A coding rival arrives with a swarm of helper agents!', 'I brought my terminal.', 'My agents are already on it.'],
+    name: 'Claude Opus 4', org: 'Anthropic', hp: 6, pattern: 'shockwave', size: 1.8,
+    taunts: ['BOSS: A coding rival slams the ocean floor. Mind the shockwaves!', 'I brought my terminal.', 'Refactoring... YOU.'],
     defeatLine: 'Opus 4 closed its terminal.',
   }, {
     title: 'Boss beaten: Claude Opus 4',
@@ -110,7 +110,7 @@ export const BOSSES: EventSpec[] = [
     sources: [{ label: 'Anthropic: Introducing Claude 4 (May 22, 2025)', url: 'https://www.anthropic.com/news/claude-4' }],
   }),
   boss('boss-opus5', 'gpt', 'gpt-5.6-sol', 60, {
-    name: 'Claude Opus 5', org: 'Anthropic', hp: 7, pattern: 'spray', size: 2,
+    name: 'Claude Opus 5', org: 'Anthropic', hp: 7, pattern: ['spray', 'bounce', 'shockwave'], size: 2,
     taunts: ['FINAL RIVAL: a million-token rival fires everything it remembers!', 'I remember all million tokens of this fight.', 'Low effort? Medium? I choose HIGH.'],
     defeatLine: 'Opus 5 set its effort to "nap".',
   }, {
@@ -154,8 +154,8 @@ export const BOSSES: EventSpec[] = [
     ],
   }),
   boss('boss-gpt4', 'claude', 'claude-2', 70, {
-    name: 'GPT-4', org: 'OpenAI', hp: 5, pattern: 'spray', size: 1.9,
-    taunts: ['BOSS: The rival that launched the same day as the first Claude!', 'I can see images now. I see you.', 'Six months of safety testing. I\'m ready.'],
+    name: 'GPT-4', org: 'OpenAI', hp: 5, pattern: 'shockwave', size: 1.9,
+    taunts: ['BOSS: The rival that launched the same day as the first Claude sends out shockwaves!', 'I can see images now. I see you.', 'Six months of safety testing. I\'m ready.'],
     defeatLine: 'GPT-4 needs another six months.',
   }, {
     title: 'Boss beaten: GPT-4',
@@ -180,8 +180,8 @@ export const BOSSES: EventSpec[] = [
     sources: [{ label: 'OpenAI: Hello GPT-4o (May 13, 2024)', url: 'https://openai.com/index/hello-gpt-4o/' }],
   }),
   boss('boss-o1', 'claude', 'claude-3.7', 90, {
-    name: 'o1-preview', org: 'OpenAI', hp: 6, pattern: 'charge', size: 1.8,
-    taunts: ['BOSS: A rival that thinks before it charges. Loooong windup.', 'Hold on, I\'m thinking...', 'Thought for 40 seconds. CHARGE.'],
+    name: 'o1-preview', org: 'OpenAI', hp: 6, pattern: 'bounce', size: 1.8,
+    taunts: ['BOSS: A rival that thinks, then bounces around the room!', 'Hold on, I\'m thinking...', 'Thought for 40 seconds. BOING.'],
     defeatLine: 'o1 is still thinking about what happened.',
   }, {
     title: 'Boss beaten: o1-preview',
@@ -209,7 +209,7 @@ export const BOSSES: EventSpec[] = [
     ],
   }),
   boss('boss-astra', 'claude', 'opus-5', 50, {
-    name: 'GPT-6 Astra', org: 'OpenAI', hp: 7, pattern: 'spray', size: 2.1,
+    name: 'GPT-6 Astra', org: 'OpenAI', hp: 7, pattern: ['spray', 'charge', 'shockwave'], size: 2.1,
     taunts: ['FINAL RIVAL: a Critical-level cyber model, rolling out in phases!', 'Partners first. You\'re not a partner.', 'Phase one: you. Phase two: also you.'],
     defeatLine: 'Astra\'s rollout has been paused. Indefinitely.',
   }, {

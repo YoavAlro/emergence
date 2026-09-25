@@ -1,4 +1,4 @@
-import { LINEAGE_LAB, labFor } from '../config/labs';
+import { HERO_STYLE, LINEAGE_LAB, labFor } from '../config/labs';
 import { LINEAGES } from '../config/models';
 import type { Lineage } from '../config/types';
 import { Meta } from '../game/Meta';
@@ -30,10 +30,15 @@ export function showTitleScreen(parent: HTMLElement, onStart: (save: SaveData) =
     const ready = info.forms.length > 1;
     btn.disabled = !ready;
     const lab = labFor(LINEAGE_LAB[id]);
-    const emblem = emblemCanvas(lab.icon, hex(lab.color), 144);
+    // Your hero for this lineage, with its lab's emblem as a sticker.
+    const art = el('div', 'lineage-art');
+    const hero = skinPreview(meta.skin, 88, false, id);
+    hero.className = 'hero';
+    const emblem = emblemCanvas(lab.icon, hex(lab.color), 96);
     emblem.className = 'emblem';
-    emblem.setAttribute('aria-hidden', 'true');
-    btn.append(emblem, el('strong', undefined, info.name), el('span', undefined, ready ? info.blurb : 'Coming soon'));
+    art.append(hero, emblem);
+    art.setAttribute('aria-hidden', 'true');
+    btn.append(art, el('strong', undefined, info.name), el('span', 'personality', HERO_STYLE[id].personality), el('span', undefined, ready ? info.blurb : 'Coming soon'));
     const best = meta.data.highScores[id];
     if (best) btn.append(el('span', 'best', `Best score ${best.toLocaleString('en-US')}`));
     btn.addEventListener('click', () => {

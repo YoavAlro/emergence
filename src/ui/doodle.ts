@@ -24,6 +24,11 @@ export type DoodleIcon =
   | 'question'
   | 'bridge'
   | 'heart'
+  | 'magnet'
+  | 'shield'
+  | 'double'
+  | 'mouth'
+  | 'star'
   | EmblemIcon;
 
 /** Deterministic jitter so each frame wobbles differently but stays stable. */
@@ -356,6 +361,54 @@ export function drawIcon(ctx: CanvasRenderingContext2D, icon: DoodleIcon, x: num
         pen.fillStroke(INK, w * 0.4);
       }
       break;
+    case 'magnet':
+      pen.path([P(-30, -30), P(-30, 6), P(-22, 24), P(0, 32), P(22, 24), P(30, 6), P(30, -30), P(14, -30), P(14, 6), P(0, 14), P(-14, 6), P(-14, -30)], true);
+      pen.fillStroke(fill, w);
+      pen.rect(x - 32 * u, y - 36 * u, 18 * u, 12 * u);
+      pen.fillStroke('#e0355f', w * 0.8);
+      pen.rect(x + 14 * u, y - 36 * u, 18 * u, 12 * u);
+      pen.fillStroke('#e0355f', w * 0.8);
+      break;
+    case 'shield':
+      pen.path([P(0, -38), P(32, -26), P(28, 10), P(0, 38), P(-28, 10), P(-32, -26)], true);
+      pen.fillStroke(fill, w);
+      pen.path([P(0, -24), P(0, 24)]);
+      pen.stroke(w * 0.7);
+      pen.path([P(-18, -6), P(18, -6)]);
+      pen.stroke(w * 0.7);
+      break;
+    case 'double':
+      pen.circle(x, y, 38 * u, 16);
+      pen.fillStroke(fill, w);
+      ctx.save();
+      ctx.fillStyle = INK;
+      ctx.font = `800 ${Math.round(38 * u)}px "Baloo 2", system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('×2', x, y + 3 * u);
+      ctx.restore();
+      break;
+    case 'mouth':
+      pen.circle(x, y, 38 * u, 16);
+      pen.fillStroke(fill, w);
+      pen.path([P(-24, -4), P(0, 26), P(24, -4)], true);
+      pen.fillStroke(INK, w * 0.6);
+      pen.path([P(-12, -2), P(-8, 6), P(-4, -2)], true);
+      pen.fillStroke('#ffffff', w * 0.3);
+      pen.path([P(4, -2), P(8, 6), P(12, -2)], true);
+      pen.fillStroke('#ffffff', w * 0.3);
+      break;
+    case 'star': {
+      const pts: [number, number][] = [];
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+        const r = i % 2 ? 16 : 38;
+        pts.push(P(Math.cos(a) * r, Math.sin(a) * r));
+      }
+      pen.path(pts, true);
+      pen.fillStroke(fill, w);
+      break;
+    }
     case 'kite':
       pen.path([P(0, -38), P(26, -4), P(0, 26), P(-26, -4)], true);
       pen.fillStroke(fill, w);

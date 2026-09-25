@@ -659,7 +659,7 @@ canvas { display: block; }
 .lineage:not(:disabled):hover { border-color: var(--ink); transform: rotate(-1.5deg) scale(1.03); }
 .lineage strong { font-family: var(--pop); font-size: 22px; color: var(--ink); }
 .lineage span { color: var(--muted); }
-.lineage .emblem { width: 72px; height: 72px; }
+
 .lineage .best { color: var(--accent); font-weight: 800; font-size: 12px; }
 .trophies-btn canvas { display: inline-block; margin-right: 4px; }
 .title-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
@@ -777,3 +777,93 @@ canvas { display: block; }
   .popup { font-size: 13px; }
   .modal h2 { font-size: 21px; }
 }
+
+/* ---- Goals, power-ups, challenges, guide arrow ---- */
+.hud-bottom {
+  position: absolute;
+  left: 50%;
+  bottom: max(40px, calc(env(safe-area-inset-bottom) + 34px));
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: min(440px, calc(100vw - 32px));
+}
+.next-chip {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 12px 3px 10px;
+  border-radius: 999px;
+  background: var(--cream);
+  border: 2.5px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  font-family: var(--pop);
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--ink);
+}
+.next-chip.ready { background: #7dffb0; }
+.next-label { font-size: 12px; color: var(--muted); }
+.next-chip.ready .next-label { color: var(--ink); font-size: 15px; }
+.next-icon { width: 28px; height: 28px; }
+.challenge-pill {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  padding: 4px 12px;
+  border-radius: 12px;
+  background: #fff4c2;
+  border: 2.5px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  font-weight: 800;
+  font-size: 12px;
+  text-align: center;
+  color: var(--ink);
+}
+.challenge-pill::after { content: ''; position: absolute; left: 0; bottom: 0; height: 4px; width: var(--time, 100%); background: #ff5ca8; }
+.challenge-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: rgba(125, 255, 176, 0.7); transition: width 0.2s; }
+.challenge-text { position: relative; }
+.power-row { display: grid; gap: 4px; justify-items: end; }
+.power-pill {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; gap: 4px;
+  padding: 2px 10px 4px 4px;
+  border-radius: 999px;
+  border: 2.5px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  font-family: var(--pop); font-weight: 800; font-size: 12px; color: var(--ink);
+}
+.power-pill img { width: 22px; height: 22px; }
+.power-pill i { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--ink); }
+.guide-arrow {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: grid; justify-items: center;
+  pointer-events: none;
+}
+.guide-head {
+  display: block;
+  line-height: 0;
+  color: #ffd84d;
+  filter: drop-shadow(2px 2px 0 #1b1330);
+  animation: guide-pulse 0.9s ease-in-out infinite;
+}
+.guide-arrow[data-kind='boss'] .guide-head { color: #ff9a3d; }
+.guide-arrow[data-kind='boss'] svg { width: 54px; height: 54px; }
+.guide-arrow[data-kind='power'] .guide-head { color: #ff9ad5; }
+.guide-arrow[data-kind='data'] .guide-head { color: #7dffb0; }
+.guide-arrow[data-kind='data'] svg { width: 34px; height: 34px; }
+.guide-label { font-family: var(--pop); font-weight: 800; font-size: 12px; color: #fff; -webkit-text-stroke: 1px var(--ink); paint-order: stroke fill; white-space: nowrap; }
+@keyframes guide-pulse { 50% { opacity: 0.6; } }
+@media (max-width: 720px) {
+  .hud-bottom { bottom: calc(max(20px, env(safe-area-inset-bottom)) + 150px); width: calc(100vw - 32px); }
+  .next-chip { font-size: 13px; }
+}
+@media (max-width: 720px) {
+  /* Phones: goals sit bottom-left (over the joystick area, which ignores them), clear of the banner and toasts. */
+  .hud-bottom { left: var(--gutter); transform: none; bottom: max(20px, env(safe-area-inset-bottom)); width: calc(100vw - 32px - 200px); justify-items: start; }
+  .challenge-pill { font-size: 11px; text-align: left; }
+}
+.lineage-art { position: relative; width: 120px; height: 104px; }
+.lineage-art .hero { position: absolute; left: 4px; top: 0; width: 100px; height: 100px; animation: wobble 2.4s ease-in-out infinite; }
+.lineage-art .emblem { position: absolute; right: -6px; bottom: 0; width: 44px; height: 44px; }
+.lineage .personality { font-style: italic; color: var(--ink); font-size: 12px; }

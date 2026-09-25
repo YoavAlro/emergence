@@ -1,85 +1,33 @@
 import { ACHIEVEMENTS, SKINS, type SkinSpec } from '../config/achievements';
 import type { Meta } from '../game/Meta';
 import { el, hex } from './dom';
-import { INK, Pen } from './doodle';
+import { HERO_STYLE } from '../config/labs';
+import { SIZE, drawHero } from './creatures';
+import { INK } from './doodle';
 import { showPanel } from './FactCard';
 
-const DEFAULT_BODY = 0x7fd4ff;
-
-/** A little doodle of your creature wearing the skin. */
-export function skinPreview(skin: SkinSpec, size = 72, locked = false): HTMLCanvasElement {
+/** Your hero wearing the skin, as a doodle. */
+export function skinPreview(skin: SkinSpec, size = 72, locked = false, lineage: 'gpt' | 'claude' = 'claude'): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = c.height = size * 2;
   const ctx = c.getContext('2d')!;
-  ctx.scale(2, 2);
-  const pen = new Pen(ctx, skin.id.length * 7 + 3, 1.2);
-  const r = size * 0.3;
-  const cx = size / 2;
-  const cy = size * 0.58;
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = INK;
-  ctx.lineJoin = 'round';
-  ctx.fillStyle = locked ? '#8a8699' : hex(skin.color ?? DEFAULT_BODY);
-  pen.circle(cx, cy, r);
-  pen.fillStroke(ctx.fillStyle as string, 3);
-  for (const s of [-1, 1]) {
-    ctx.fillStyle = '#ffffff';
-    pen.circle(cx + s * r * 0.38, cy - r * 0.15, r * 0.28);
-    pen.fillStroke(ctx.fillStyle as string, 3);
-    ctx.fillStyle = INK;
-    ctx.beginPath();
-    ctx.arc(cx + s * r * 0.38, cy - r * 0.12, r * 0.12, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.fillStyle = '#ffffff';
-  const top = cy - r;
-  switch (locked ? 'none' : skin.accessory) {
-    case 'partyHat':
-      ctx.fillStyle = '#ff5ca8';
-      pen.path([[cx - r * 0.45, top + 4], [cx + r * 0.45, top + 4], [cx + r * 0.1, top - r * 0.9]], true);
-      pen.fillStroke(ctx.fillStyle as string, 3);
-      break;
-    case 'shades':
-      ctx.fillStyle = INK;
-      pen.rect(cx - r * 0.75, cy - r * 0.35, r * 1.5, r * 0.4);
-      pen.fillStroke(ctx.fillStyle as string, 3);
-      break;
-    case 'bowtie':
-      ctx.fillStyle = '#e03a5a';
-      pen.path([[cx, cy + r * 1.02], [cx - r * 0.45, cy + r * 0.8], [cx - r * 0.45, cy + r * 1.25]], true);
-      pen.fillStroke(ctx.fillStyle as string, 3);
-      pen.path([[cx, cy + r * 1.02], [cx + r * 0.45, cy + r * 0.8], [cx + r * 0.45, cy + r * 1.25]], true);
-      pen.fillStroke(ctx.fillStyle as string, 3);
-      break;
-    case 'crown':
-      ctx.fillStyle = '#ffd84d';
-      pen.path(
-        [
-          [cx - r * 0.5, top + 4],
-          [cx - r * 0.55, top - r * 0.45],
-          [cx - r * 0.2, top - r * 0.15],
-          [cx, top - r * 0.6],
-          [cx + r * 0.2, top - r * 0.15],
-          [cx + r * 0.55, top - r * 0.45],
-          [cx + r * 0.5, top + 4],
-        ],
-        true,
-      );
-      pen.fillStroke(ctx.fillStyle as string, 3);
-      break;
-    case 'halo':
-      ctx.strokeStyle = '#ffd84d';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.ellipse(cx, top - r * 0.3, r * 0.6, r * 0.18, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      break;
-  }
+  ctx.scale((size * 2) / SIZE, (size * 2) / SIZE);
+  drawHero(ctx, {
+    style: HERO_STYLE[lineage],
+    body: locked ? '#8a8699' : skin.color !== undefined ? hex(skin.color) : undefined,
+    stage: 3,
+    freckles: 3,
+    parts: [],
+    accessory: locked ? 'none' : skin.accessory,
+    mouthOpen: false,
+    blink: false,
+    frame: 0,
+  });
   if (locked) {
     ctx.fillStyle = INK;
-    ctx.font = `700 ${Math.round(size * 0.28)}px system-ui, sans-serif`;
+    ctx.font = '800 90px "Baloo 2", system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('?', cx, cy + r * 0.45);
+    ctx.fillText('?', SIZE / 2, SIZE * 0.72);
   }
   return c;
 }

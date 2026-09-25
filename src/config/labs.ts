@@ -53,3 +53,28 @@ export function labFor(org: string): LabSpec {
 
 /** The player's own lab, per lineage. */
 export const LINEAGE_LAB: Record<'gpt' | 'claude', string> = { gpt: 'OpenAI', claude: 'Anthropic' };
+
+/**
+ * How each lineage's hero is drawn. Inspired by each company's colors and product style,
+ * with an original crest; deliberately not a copy of any logo.
+ */
+export interface HeroStyle {
+  /** Main body color. */
+  body: string;
+  /** Tummy patch. */
+  belly: string;
+  cheeks: string;
+  /** Crest and trim color. */
+  accent: string;
+  /** Crest drawn on the head from Stage 2 on. */
+  crest: 'spark' | 'loop';
+  /** A few words shown in the editor and title. */
+  personality: string;
+}
+
+export const HERO_STYLE: Record<'gpt' | 'claude', HeroStyle> = {
+  // Clean monochrome with a bright green accent.
+  gpt: { body: '#f7f7f4', belly: '#e3e3dc', cheeks: '#9fe3cc', accent: '#10a37f', crest: 'loop', personality: 'Fast, curious, always shipping' },
+  // Warm terracotta and cream.
+  claude: { body: '#d97757', belly: '#f6e8d8', cheeks: '#f3a78c', accent: '#fbf3e8', crest: 'spark', personality: 'Thoughtful, careful, a bit bookish' },
+};

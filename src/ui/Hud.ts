@@ -5,6 +5,7 @@ import type { Action } from '../game/Input';
 import { ACCURACY_TO_EVOLVE } from '../game/Progress';
 import { CONSTITUTION_HIGH, CONSTITUTION_LOW, formatUsers, type GateCheck } from '../game/RunState';
 import { el, hex, pct } from './dom';
+import { drawIcon, type DoodleIcon } from './doodle';
 
 export type BannerKind = 'hype' | 'storm' | 'moment' | 'boss' | 'evolve';
 
@@ -55,6 +56,35 @@ export interface HudState {
   multiplier: number;
   comboAlive: boolean;
   highScore: number;
+  /** The data type to eat next. */
+  wanted: DataTypeId | null;
+  dietReady: boolean;
+  powers: { name: string; color: number; icon: DoodleIcon; fraction: number }[];
+  challenge: { text: string; fraction: number; timeFraction: number } | null;
+}
+
+export interface GuideState {
+  /** 0..1 screen position. */
+  x: number;
+  y: number;
+  angle: number;
+  label: string;
+  kind: 'boss' | 'event' | 'power' | 'data';
+}
+
+const iconCache = new Map<string, string>();
+/** A small doodled icon as a data URL, for DOM chips. */
+function iconUrl(icon: DoodleIcon, fill: string): string {
+  const key = `${icon}|${fill}`;
+  let url = iconCache.get(key);
+  if (!url) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    drawIcon(c.getContext('2d')!, icon, 32, 32, 56, 0, fill);
+    url = c.toDataURL();
+    iconCache.set(key, url);
+  }
+  return url;
 }
 
 interface DietRow {
@@ -128,6 +158,14 @@ export class Hud {
   private readonly scoreBest = el('div', 'score-best');
   private readonly comboBox = el('div', 'hud-combo');
   private readonly trophies = el('div', 'trophy-toasts');
+  private readonly nextChip = el('div', 'next-chip');
+  private readonly powerRow = el('div', 'power-row');
+  private readonly challengeBox = el('div', 'challenge-pill');
+  private readonly challengeFill = el('div', 'challenge-fill');
+  private readonly challengeText = el('span', 'challenge-text');
+  private readonly arrow = el('div', 'guide-arrow');
+  private readonly arrowLabel = el('span', 'guide-label');
+  private nextKey = '';
   private shownScore = 0;
   private lastCombo = 0;
   private readonly buttons = new Map<Action, HTMLButtonElement>();
@@ -219,7 +257,19 @@ export class Hud {
     this.scoreBox.append(this.scoreValue, this.comboBox, this.scoreBest);
     right.append(this.scoreBox, this.meters, top);
     this.trophies.setAttribute('aria-live', 'polite');
-    this.root.append(left, right, this.banner, this.ticker, this.bubble, this.toasts, this.trophies);
+    this.challengeBox.append(this.challengeFill, this.challengeText);
+    this.challengeBox.hidden = true;
+    const head = el('span', 'guide-head');
+    // A chunky doodled arrow pointing right (rotated toward the target).
+    head.innerHTML =
+      '<svg viewBox="0 0 48 48" width="44" height="44" aria-hidden="true"><path d="M6 17 L26 17 L26 7 L44 24 L26 41 L26 31 L6 31 Z" fill="currentColor" stroke="#1b1330" stroke-width="4" stroke-linejoin="round"/></svg>';
+    this.arrow.append(head, this.arrowLabel);
+    this.arrow.hidden = true;
+    this.nextChip.hidden = true;
+    const bottom = el('div', 'hud-bottom');
+    bottom.append(this.challengeBox, this.nextChip);
+    right.insertBefore(this.powerRow, this.meters);
+    this.root.append(left, right, this.banner, this.ticker, this.bubble, this.toasts, this.trophies, bottom, this.arrow);
 
     const pad = el('div', 'action-pad');
     for (const b of BUTTONS) {
@@ -293,6 +343,8 @@ export class Hud {
     this.epLine.textContent = extras.join(' · ');
 
     this.renderScore(s);
+    this.renderNext(s);
+    this.renderPowers(s);
     this.renderEvent(s.event);
     this.renderButtons(s);
     this.ticker.classList.toggle('visible', s.riding);
@@ -315,6 +367,65 @@ export class Hud {
       }
     }
     this.lastCombo = s.combo;
+  }
+
+  private renderNext(s: HudState): void {
+    const key = s.dietReady ? 'ready' : (s.wanted ?? '');
+    if (key !== this.nextKey) {
+      this.nextKey = key;
+      this.nextChip.hidden = !key;
+      if (s.dietReady) {
+        this.nextChip.replaceChildren(el('span', 'next-label', 'Diet ready!'));
+        this.nextChip.classList.add('ready');
+      } else if (s.wanted) {
+        const t = DATA_TYPES[s.wanted];
+        const img = el('img', 'next-icon');
+        img.src = iconUrl(t.icon, hex(t.color));
+        img.alt = '';
+        this.nextChip.replaceChildren(el('span', 'next-label', 'Eat'), img, el('strong', undefined, t.label));
+        this.nextChip.classList.remove('ready');
+      }
+    }
+    const c = s.challenge;
+    this.challengeBox.hidden = !c;
+    if (c) {
+      this.challengeText.textContent = c.text;
+      this.challengeFill.style.width = pct(c.fraction);
+      this.challengeBox.style.setProperty('--time', pct(c.timeFraction));
+    }
+  }
+
+  private renderPowers(s: HudState): void {
+    const key = s.powers.map((p) => p.name).join('|');
+    if (this.powerRow.dataset.key !== key) {
+      this.powerRow.dataset.key = key;
+      this.powerRow.replaceChildren(
+        ...s.powers.map((p) => {
+          const pill = el('div', 'power-pill');
+          pill.style.background = hex(p.color);
+          const img = el('img');
+          img.src = iconUrl(p.icon, '#fff8ec');
+          img.alt = '';
+          pill.append(img, el('span', undefined, p.name), el('i'));
+          return pill;
+        }),
+      );
+    }
+    s.powers.forEach((p, i) => {
+      const bar = this.powerRow.children[i]?.querySelector('i') as HTMLElement | null;
+      if (bar) bar.style.width = pct(p.fraction);
+    });
+  }
+
+  /** The edge-of-screen arrow toward the next thing to swim to. */
+  guide(g: GuideState | null): void {
+    this.arrow.hidden = !g;
+    if (!g) return;
+    this.arrow.dataset.kind = g.kind;
+    this.arrow.style.left = `${g.x * 100}%`;
+    this.arrow.style.top = `${g.y * 100}%`;
+    (this.arrow.firstElementChild as HTMLElement).style.transform = `rotate(${-g.angle}rad)`;
+    this.arrowLabel.textContent = g.label;
   }
 
   /** Achievement sticker that slides in. */

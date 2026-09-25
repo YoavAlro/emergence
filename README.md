@@ -5,10 +5,15 @@ Transformer, eat the data the real models trained on, and evolve through real mo
 from GPT-1 to **GPT-6 Astra** or from a 2021 research model to **Claude Opus 5.5**. Ride hype
 waves, survive storms pinned to real incidents, and laugh at the funny moments along the way.
 
-It's drawn like a cartoon: toon-shaded creatures with ink outlines, hand-doodled data icons with a
-"line boil" wobble, and sticker-style HUD panels. Eat fast for **combos** (up to ×5 points), bonk a
-**rival-lab boss** in every stage (dodge while it attacks, hit it while it's dizzy), and unlock
-**achievements and skins** (party hat, shades, a crown...) that carry across runs.
+It's drawn like a doodle: every creature is a flat, hand-drawn sprite with wobbly ink lines that
+"boil" like hand animation, and the HUD is made of sticker-style panels. Your hero wears its lab's
+colors (the GPT hero is white with a green loop crest, the Claude hero terracotta with a cream
+spark), inspired by each company's style but never copying a logo. Eat fast for **combos** (up to
+×5 points), grab **power-ups** (magnet, spare GPUs, safety filter, double points, longer context),
+take on quick **challenges**, bonk a **rival-lab boss** in every stage, and unlock
+**achievements and skins** that carry across runs. A guide arrow and an "Eat next" chip always show
+what to go for; the camera swings to follow your swimming, and a gentle aim assist helps you snap up
+what the diet needs.
 
 The full design brief is in **[GAME_DESIGN.md](GAME_DESIGN.md)**; the goal is in [GOAL_PROMPT.md](GOAL_PROMPT.md).
 
@@ -44,11 +49,11 @@ node scripts/playtime.mjs gpt   # autopilot playthrough that reports minutes per
 
 | Path | What it is |
 |---|---|
-| `src/config/` | **All content**: `gptForms.ts`, `claudeForms.ts` (every model form, recipe, gate, fact card), `events.ts` + `claudeEvents.ts` (hypes and storms), `moments.ts`, `timeline.ts` (Current posts, the Tibo Reset), `parts.ts` (creature editor), `dataTypes.ts`, `world.ts`, `bosses.ts` (one rival-lab boss per stage), `labs.ts` (original lab emblems), `achievements.ts` (achievements and skins) |
+| `src/config/` | **All content**: `gptForms.ts`, `claudeForms.ts` (every model form, recipe, gate, fact card), `events.ts` + `claudeEvents.ts` (hypes and storms), `moments.ts`, `timeline.ts` (Current posts, the Tibo Reset), `parts.ts` (creature editor), `dataTypes.ts`, `world.ts`, `bosses.ts` (one rival-lab boss per stage), `labs.ts` (original lab emblems), `achievements.ts` (achievements and skins), `powerups.ts`, `challenges.ts` |
 | `src/config/types.ts` | The content schema: forms, events, objectives, modifiers |
 | `src/game/Game.ts` | Renderer, main loop, and the glue that runs config-driven effects |
-| `src/game/Progress.ts`, `RunState.ts`, `EventDirector.ts`, `Recap.ts`, `swarmRules.ts`, `Score.ts`, `Meta.ts` | Pure game logic (unit tested) |
-| `src/game/toon.ts`, `critter.ts`, `Boss.ts`, `Juice.ts`, `src/ui/doodle.ts` | The cartoon look: toon materials, outlines, eyes, doodled icons and emblems, popups, bursts, screen shake |
+| `src/game/Progress.ts`, `RunState.ts`, `EventDirector.ts`, `Recap.ts`, `swarmRules.ts`, `Score.ts`, `Meta.ts`, `PowerUps.ts`, `Challenges.ts` | Pure game logic (unit tested) |
+| `src/ui/creatures.ts`, `src/ui/doodle.ts`, `src/game/sprites.ts`, `critter.ts`, `Boss.ts`, `Juice.ts` | The doodle look: hand-drawn creature sprites with line boil, icons and emblems, popups, bursts, screen shake |
 | `src/game/DataField.ts`, `TimelineCurrent.ts`, `Swarm.ts`, `Hunters.ts`, `Pickups.ts`, `Portals.ts`, ... | World systems |
 | `src/ui/` | HUD, fact cards, editor, mini-games, recap, menu, title screen |
 | `scripts/smoke.mjs`, `scripts/playtime.mjs` | Headless checks |

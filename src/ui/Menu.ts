@@ -6,6 +6,8 @@ import { showPanel } from './FactCard';
 export type MenuResult = 'resume' | 'quit' | 'trophies';
 
 const HOW_TO = [
+  'Follow the "Eat" chip and the arrow: the data your diet needs most is drawn bigger and bobs. The camera turns to follow you, so just steer.',
+  'Power-ups (starburst stickers): Data Magnet, Spare GPUs (free boost), Safety Filter (blocks a hit), Viral Moment (×2 points), Longer Context (bigger reach). Challenges pop up between events for bonus points.',
   'Eat the data your real lab trained on. The diet panel shows your mix against the target; match it at least 65% to evolve.',
   'Hallucinations (rainbow question marks) and toxic smog (purple clouds) cost you data. Rivals, sharks, jailbreakers, and eels hunt you.',
   'Eat quickly for combos: every 8 in a row adds ×0.5 to your points (up to ×5). Getting hit breaks the combo.',

@@ -67,6 +67,8 @@ export class DataField {
   /** Where the player is thinking from, and how far thought reaches. */
   thinkFrom: THREE.Vector3 | null = null;
   thinkRange = 30;
+  /** Types the diet still needs: drawn bigger and pulsing so you know what to eat. */
+  wanted = new Set<DataTypeId>();
 
   constructor(readonly count: number, private readonly radius: number, fogColor: THREE.Color) {
     this.material = new THREE.ShaderMaterial({
@@ -149,6 +151,11 @@ export class DataField {
       // A little bob-and-squash, like a bouncing cartoon.
       const squash = 1 + Math.sin(t * 2.2 + phase * 3) * 0.08;
       let scale = kind === 'hallucination' ? 1.2 : 1;
+      if (this.wanted.size && kind !== 'hallucination') {
+        // Reward hacks pose as feedback, so they get feedback's highlight too (Think mode still exposes them).
+        const as = kind === 'rewardHack' ? 'feedback' : kind;
+        scale = this.wanted.has(as) ? 1.3 + Math.sin(t * 5 + phase) * 0.12 : 0.8;
+      }
       if (this.isHidden(kind, i)) scale = 0;
       if (closed && this.positions[i].distanceToSquared(closed.center) < closed.radius * closed.radius) scale *= 0.35;
       if (this.skin === 'bridges') this.dummy.scale.set(scale * 1.4, scale * 1.1, 1);
@@ -170,6 +177,27 @@ export class DataField {
       if (this.special.size) this.mesh.instanceColor!.needsUpdate = true;
     }
     this.mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  /**
+   * Aim assist: the nearest wanted piece roughly ahead of you (within the cone
+   * `cosMin` of `dir`, up to `range`), or -1.
+   */
+  assistTarget(pos: THREE.Vector3, dir: THREE.Vector3, range: number, cosMin: number, types: Set<DataTypeId>): number {
+    let best = -1;
+    let bestD = range * range;
+    const v = new THREE.Vector3();
+    for (let i = 0; i < this.count; i++) {
+      const kind = this.kinds[i];
+      if (kind === 'hallucination' || kind === 'rewardHack' || !types.has(kind) || this.isHidden(kind, i)) continue;
+      v.subVectors(this.positions[i], pos);
+      const d2 = v.lengthSq();
+      if (d2 >= bestD || d2 < 0.01) continue;
+      if (v.dot(dir) / Math.sqrt(d2) < cosMin) continue;
+      best = i;
+      bestD = d2;
+    }
+    return best;
   }
 
   /** Pulls particles of these types toward `center` from within `range`. */

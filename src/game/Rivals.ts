@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import type { RivalSpec } from '../config/types';
-import { makeCritter, type Critter } from './critter';
+import { faceTravel, makeCritter } from './critter';
 import { makeLabel } from './labels';
 import { randomInSphere } from './Ocean';
+import type { Doodle } from './sprites';
 
 export interface Rival {
   spec: RivalSpec;
   group: THREE.Group;
-  critter: Critter;
+  doodle: Doodle;
   velocity: THREE.Vector3;
   wander: THREE.Vector3;
   size: number;
@@ -18,13 +19,13 @@ export interface Rival {
 }
 
 const CHASE_RANGE = 45;
-const STUMBLE_COLOR = new THREE.Color(0x9aa0ad);
 
-/** Competing labs' models: bigger cartoon predators that hunt you. */
+/** Competing labs' models: bigger doodled predators that hunt you. */
 export class Rivals {
   readonly group = new THREE.Group();
   list: Rival[] = [];
-  private readonly tmp = new THREE.Vector3();
+  /** Set by the Game each frame so rivals can face their direction of travel on screen. */
+  cameraRight = new THREE.Vector3(1, 0, 0);
 
   constructor(scene: THREE.Scene, private readonly radius: number) {
     scene.add(this.group);
@@ -37,19 +38,19 @@ export class Rivals {
   }
 
   private make(spec: RivalSpec, size: number, avoid: THREE.Vector3, currentPoint: (() => THREE.Vector3) | undefined, guest: boolean): Rival {
-    const critter = makeCritter(spec.org, size);
-    const group = critter.group;
+    const doodle = makeCritter(spec.org, size);
+    const group = new THREE.Group();
     const label = makeLabel(`${spec.name} · ${spec.org}`);
     label.scale.set(size * 5, size * 1.25, 1);
     label.position.y = size * 2.3;
-    group.add(label);
+    group.add(doodle.sprite, label);
     if (currentPoint) group.position.copy(currentPoint());
     else {
       do randomInSphere(this.radius * 0.8, group.position);
       while (group.position.distanceTo(avoid) < 40);
     }
     this.group.add(group);
-    return { spec, group, critter, size, velocity: new THREE.Vector3(), wander: randomInSphere(this.radius * 0.8), stumbling: 0, guest };
+    return { spec, group, doodle, size, velocity: new THREE.Vector3(), wander: randomInSphere(this.radius * 0.8), stumbling: 0, guest };
   }
 
   /** A rival stumbles (a public blunder). Spawns a guest rival nearby if it isn't in this era. */
@@ -61,8 +62,7 @@ export class Rivals {
       this.list.push(r);
     }
     r.stumbling = seconds;
-    r.critter.mat.color.copy(STUMBLE_COLOR);
-    r.critter.mat.emissive.copy(STUMBLE_COLOR);
+    r.doodle.material.color.setHex(0xb0b4c0);
     return r;
   }
 
@@ -71,8 +71,7 @@ export class Rivals {
     this.list = this.list.filter((q) => !q.guest);
     for (const r of this.list) {
       r.stumbling = 0;
-      r.critter.mat.color.setHex(r.critter.baseColor);
-      r.critter.mat.emissive.setHex(r.critter.baseColor);
+      r.doodle.material.color.setHex(0xffffff);
     }
   }
 
@@ -87,16 +86,16 @@ export class Rivals {
       desired.subVectors(chasing ? playerPos : r.wander, pos).normalize().multiplyScalar(speed * speedScale);
       r.velocity.lerp(desired, Math.min(1, dt * 1.2));
       pos.addScaledVector(r.velocity, dt);
-      const body = r.critter.body;
-      if (r.stumbling) body.rotation.set(t * 3, t * 2, Math.sin(t * 6) * 0.5);
-      else {
-        body.lookAt(this.tmp.copy(pos).add(r.velocity));
-        // A menacing bob.
-        body.position.y = Math.sin(t * 3 + r.group.id) * r.size * 0.12;
-      }
+      const d = r.doodle;
+      d.radius = r.size;
+      faceTravel(d, r.velocity, this.cameraRight);
+      // A menacing bob, or a stumbling wobble.
+      const wob = r.stumbling ? Math.sin(t * 8) * 0.35 : Math.sin(t * 3 + r.group.id) * 0.08;
+      d.material.rotation = wob;
       const s = 1 + Math.sin(t * 6 + r.group.id) * 0.05;
-      body.scale.set(r.size * s, r.size / s, r.size * s);
-      r.critter.eyes.update(t);
+      d.squashX = s;
+      d.squashY = 1 / s;
+      d.update(t);
     }
   }
 

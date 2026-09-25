@@ -1,8 +1,10 @@
 import * as THREE from 'three';
-import type { BossSpec } from '../config/types';
-import { makeCritter, type Critter } from './critter';
-import { makeLabel } from './labels';
-import { outline, toonMat } from './toon';
+import { labFor } from '../config/labs';
+import type { BossPattern, BossSpec } from '../config/types';
+import { drawRing, drawShot, drawStar } from '../ui/creatures';
+import { critterLooks, faceTravel } from './critter';
+import { hexCss, makeLabel } from './labels';
+import { Doodle, frames } from './sprites';
 
 export type BossState = 'intro' | 'attack' | 'dizzy' | 'recoil';
 
@@ -10,40 +12,51 @@ const INTRO_SEC = 2.5;
 const ATTACK_SEC = 5.5;
 const DIZZY_SEC = 3.6;
 const RECOIL_SEC = 0.9;
-const DIZZY_COLOR = new THREE.Color(0xffe35a);
 
 interface Shot {
-  mesh: THREE.Mesh;
+  doodle: Doodle;
   vel: THREE.Vector3;
   life: number;
+}
+
+interface Ring {
+  doodle: Doodle;
+  r: number;
+  speed: number;
+  max: number;
 }
 
 export interface BossTick {
   /** Rival clones to summon this frame. */
   summon: number;
-  /** A charge or lunge just started (for a whoosh). */
+  /** A charge, lunge, or slam just started (for a whoosh). */
   lunged: boolean;
 }
 
 /**
  * A rival-lab boss: attacks in a pattern, then gets dizzy. Bonk it while it's
- * dizzy; stay out of its way while it attacks. Pure-ish: the Game applies damage.
+ * dizzy; stay out of its way while it attacks. The Game applies the damage.
  */
 export class Boss {
-  readonly critter: Critter;
-  readonly group: THREE.Group;
+  readonly group = new THREE.Group();
+  readonly doodle: Doodle;
   readonly size: number;
   hp: number;
   state: BossState = 'intro';
+  /** Set by the Game so the sprite faces its screen-space travel. */
+  cameraRight = new THREE.Vector3(1, 0, 0);
+  private readonly normalLooks: THREE.Texture[];
+  private readonly dizzyLooks: THREE.Texture[];
   private stateT = 0;
   private cycleT = 0;
+  private attacks = 0;
   private readonly velocity = new THREE.Vector3();
   private readonly dashDir = new THREE.Vector3();
   private readonly shots: Shot[] = [];
-  private readonly shotGeo: THREE.SphereGeometry;
-  private readonly shotMat: THREE.MeshToonMaterial;
-  private readonly stars = new THREE.Group();
+  private readonly rings: Ring[] = [];
+  private readonly stars: Doodle[] = [];
   private readonly tmp = new THREE.Vector3();
+  private readonly color: string;
   private orbitAngle = Math.random() * Math.PI * 2;
   private shotTimer = 0;
   private lunging = false;
@@ -64,28 +77,21 @@ export class Boss {
     this.pace = (10 + playerRadius * 2) / 12;
     this.standoff = 10 + this.size * 2 + playerRadius * 1.5;
     this.hp = spec.hp;
-    this.critter = makeCritter(spec.org, this.size, 9);
-    this.group = this.critter.group;
+    this.color = hexCss(labFor(spec.org).color);
+    this.normalLooks = critterLooks(spec.org, { crown: true });
+    this.dizzyLooks = critterLooks(spec.org, { crown: true, dizzy: true });
+    this.doodle = new Doodle(this.normalLooks, this.size);
     const tag = makeLabel(`${spec.name} · ${spec.org}`, '#ffe3a8');
     tag.scale.set(this.size * 5, this.size * 1.25, 1);
-    tag.position.y = this.size * 2.4;
-    this.group.add(tag);
-    // A tiny crown: bosses are the rivals of their era.
-    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.28, 0.3, 5, 1, true), toonMat(0xffd84d, 0.4));
-    crown.position.y = 0.95;
-    outline(crown, 0.12);
-    this.critter.body.add(crown);
-    const starGeo = new THREE.OctahedronGeometry(0.22, 0);
-    const starMat = toonMat(0xffe35a, 0.6);
+    tag.position.y = this.size * 2.5;
+    this.group.add(this.doodle.sprite, tag);
+    const starLooks = frames('star', drawStar);
     for (let i = 0; i < 5; i++) {
-      const s = new THREE.Mesh(starGeo, starMat);
-      outline(s, 0.15);
-      this.stars.add(s);
+      const s = new Doodle(starLooks, this.size * 0.12);
+      s.sprite.visible = false;
+      this.stars.push(s);
+      this.group.add(s.sprite);
     }
-    this.stars.visible = false;
-    this.group.add(this.stars);
-    this.shotGeo = new THREE.SphereGeometry(Math.max(0.5, this.size * 0.3), 10, 8);
-    this.shotMat = toonMat(this.critter.baseColor, 0.5);
     this.group.position.copy(near).add(this.tmp.randomDirection().multiplyScalar(this.standoff + 14));
     scene.add(this.group);
   }
@@ -98,17 +104,25 @@ export class Boss {
     return this.state === 'dizzy';
   }
 
+  /** The current attack pattern: lists cycle one pattern per attack phase. */
+  get pattern(): BossPattern {
+    const p = this.spec.pattern;
+    return Array.isArray(p) ? p[this.attacks % p.length] : p;
+  }
+
   /** Attacks get faster as the boss loses health. */
   private get fury(): number {
     return 1 + (1 - this.hp / this.maxHp) * 0.6;
   }
 
   private setState(s: BossState): void {
+    if (s === 'attack' && this.state !== 'attack') this.attacks++;
     this.state = s;
     this.stateT = 0;
     this.cycleT = 0;
     this.lunging = false;
-    this.stars.visible = s === 'dizzy';
+    for (const star of this.stars) star.sprite.visible = s === 'dizzy';
+    this.doodle.setLooks(s === 'dizzy' ? this.dizzyLooks : this.normalLooks);
   }
 
   update(dt: number, t: number, player: THREE.Vector3): BossTick {
@@ -126,7 +140,7 @@ export class Boss {
         desired.copy(toPlayer).multiplyScalar(dist > this.standoff ? 10 * this.pace : 0);
         if (this.stateT > INTRO_SEC) {
           this.setState('attack');
-          if (this.spec.pattern === 'summon') out.summon = 2;
+          if (this.pattern === 'summon') out.summon = 2;
         }
         break;
       case 'attack':
@@ -137,26 +151,27 @@ export class Boss {
         desired.set(Math.sin(t * 2), 0, Math.cos(t * 2)).multiplyScalar(1.5);
         if (this.stateT > DIZZY_SEC) {
           this.setState('attack');
-          if (this.spec.pattern === 'summon') out.summon = 2;
+          if (this.pattern === 'summon') out.summon = 2;
         }
         break;
       case 'recoil':
         if (this.stateT > RECOIL_SEC) this.setState('attack');
         break;
     }
-    const k = this.lunging ? 1 : Math.min(1, dt * 2.5);
+    const bouncing = this.state === 'attack' && this.pattern === 'bounce';
+    const k = this.lunging || bouncing ? 1 : Math.min(1, dt * 2.5);
     if (this.state !== 'recoil') this.velocity.lerp(desired, k);
     else this.velocity.multiplyScalar(1 - Math.min(1, dt * 2));
     pos.addScaledVector(this.velocity, dt);
 
-    this.animate(dt, t, player);
-    this.updateShots(dt);
+    this.animate(t);
+    this.updateShots(dt, t);
     return out;
   }
 
   private attack(dt: number, dist: number, toPlayer: THREE.Vector3, desired: THREE.Vector3, out: BossTick): void {
     const f = this.fury * this.pace;
-    switch (this.spec.pattern) {
+    switch (this.pattern) {
       case 'charge': {
         const cycle = 1.9 / f;
         if (this.cycleT > cycle) this.cycleT = 0;
@@ -210,66 +225,108 @@ export class Boss {
         }
         break;
       }
+      case 'bounce': {
+        // Ricochets in straight lines, bouncing off an invisible arena around you.
+        const arena = this.standoff * 1.6;
+        if (this.cycleT < dt * 1.5 || this.velocity.lengthSq() < 1) {
+          this.dashDir.copy(toPlayer).add(new THREE.Vector3().randomDirection().multiplyScalar(0.35)).normalize();
+          out.lunged = true;
+        }
+        if (dist > arena && this.dashDir.dot(toPlayer) < 0) {
+          // Hit the wall: bounce back toward you, a little off-line.
+          this.dashDir.copy(toPlayer).add(new THREE.Vector3().randomDirection().multiplyScalar(0.3)).normalize();
+          out.lunged = true;
+        }
+        desired.copy(this.dashDir).multiplyScalar(20 * f);
+        break;
+      }
+      case 'shockwave': {
+        // Hovers, then slams out an expanding ring: be outside it, or boost through it.
+        desired.copy(toPlayer).multiplyScalar((dist - this.standoff) * 0.6);
+        const cycle = 2.2 / this.fury;
+        if (this.cycleT > cycle) {
+          this.cycleT = 0;
+          this.slam();
+          out.lunged = true;
+        }
+        break;
+      }
     }
   }
 
   private fire(dir: THREE.Vector3): void {
-    const mesh = new THREE.Mesh(this.shotGeo, this.shotMat);
-    outline(mesh, 0.15);
-    mesh.position.copy(this.group.position).addScaledVector(dir, this.size);
-    this.scene.add(mesh);
+    const doodle = new Doodle(frames(`shot:${this.color}`, (ctx, f) => drawShot(ctx, this.color, f)), Math.max(0.5, this.size * 0.3));
+    doodle.position.copy(this.group.position).addScaledVector(dir, this.size);
+    this.scene.add(doodle.sprite);
     const vel = dir.clone().add(new THREE.Vector3().randomDirection().multiplyScalar(0.08)).setLength(17 * this.pace);
-    this.shots.push({ mesh, vel, life: 3.5 });
+    this.shots.push({ doodle, vel, life: 3.5 });
   }
 
-  private updateShots(dt: number): void {
+  private slam(): void {
+    const doodle = new Doodle(frames(`ring:${this.color}`, (ctx, f) => drawRing(ctx, this.color, f)), 1, { opacity: 0.95 });
+    doodle.position.copy(this.group.position);
+    this.scene.add(doodle.sprite);
+    this.rings.push({ doodle, r: this.size, speed: 11 * this.pace, max: this.standoff * 1.8 });
+  }
+
+  private updateShots(dt: number, t: number): void {
     for (const s of this.shots) {
       s.life -= dt;
-      s.mesh.position.addScaledVector(s.vel, dt);
-      s.mesh.rotation.x += dt * 5;
+      s.doodle.position.addScaledVector(s.vel, dt);
+      s.doodle.material.rotation += dt * 5;
+      faceTravel(s.doodle, s.vel, this.cameraRight);
+      s.doodle.update(t);
     }
     for (const s of this.shots.filter((q) => q.life <= 0)) this.removeShot(s);
+    for (const r of this.rings) {
+      r.r += r.speed * dt;
+      // The ring sprite's outline sits at ~0.92 of its half-width.
+      r.doodle.radius = (r.r / 0.92) * (62 / 128);
+      r.doodle.material.opacity = Math.max(0, 1 - r.r / r.max);
+      r.doodle.update(t);
+    }
+    for (const r of this.rings.filter((q) => q.r >= q.max)) this.removeRing(r);
   }
 
   private removeShot(s: Shot): void {
-    this.scene.remove(s.mesh);
+    this.scene.remove(s.doodle.sprite);
     this.shots.splice(this.shots.indexOf(s), 1);
   }
 
-  private animate(dt: number, t: number, player: THREE.Vector3): void {
-    const body = this.critter.body;
-    const mat = this.critter.mat;
-    const base = this.critter.baseColor;
+  private removeRing(r: Ring): void {
+    this.scene.remove(r.doodle.sprite);
+    this.rings.splice(this.rings.indexOf(r), 1);
+  }
+
+  private animate(t: number): void {
+    const d = this.doodle;
+    d.radius = this.size;
     if (this.state === 'dizzy') {
-      body.rotation.set(Math.sin(t * 5) * 0.3, t * 2.5, Math.cos(t * 4) * 0.3);
+      d.material.rotation = Math.sin(t * 6) * 0.3;
       // Flashing yellow: this is your chance.
       const k = 0.5 + Math.sin(t * 12) * 0.5;
-      mat.color.setHex(base).lerp(DIZZY_COLOR, k);
-      mat.emissive.copy(mat.color);
-      mat.emissiveIntensity = 0.4;
-      this.stars.children.forEach((s, i) => {
+      d.material.color.setRGB(1, 1, 1 - k * 0.55);
+      this.stars.forEach((s, i) => {
         const a = t * 3 + (i / 5) * Math.PI * 2;
-        s.position.set(Math.cos(a) * this.size * 1.1, this.size * 1.05, Math.sin(a) * this.size * 1.1);
-        s.rotation.y = t * 4;
+        s.position.set(Math.cos(a) * this.size * 1.1, this.size * 1.15 + Math.sin(a) * this.size * 0.25, Math.sin(a) * this.size * 0.3);
+        s.update(t);
       });
     } else {
-      body.lookAt(player);
-      mat.color.setHex(base);
-      mat.emissive.setHex(base);
+      faceTravel(d, this.velocity, this.cameraRight);
+      d.material.rotation = Math.sin(t * 3) * 0.08;
       // Winding up glows red.
-      const angry = this.state === 'attack' && !this.lunging && this.spec.pattern === 'charge' ? 0.5 : 0;
-      mat.emissive.lerp(new THREE.Color(0xff2a3a), angry);
-      mat.emissiveIntensity = 0.22 + angry * 0.5;
+      const angry = this.state === 'attack' && !this.lunging && this.pattern === 'charge' ? 0.5 : 0;
+      d.material.color.setRGB(1, 1 - angry * 0.6, 1 - angry * 0.6);
     }
     const wob = this.state === 'recoil' ? 1 + Math.sin(this.stateT * 30) * 0.2 : 1 + Math.sin(t * 5) * 0.05;
-    const stretch = this.lunging ? 1.3 : 1;
-    body.scale.set((this.size * wob) / Math.sqrt(stretch), (this.size / wob) / Math.sqrt(stretch), this.size * stretch);
-    this.critter.eyes.update(t);
-    void dt;
+    const stretch = this.lunging ? 1.25 : 1;
+    d.squashX = wob * stretch;
+    d.squashY = 1 / wob / stretch;
+    d.update(t);
   }
 
   /** What touching the player means right now. */
-  contact(player: THREE.Vector3, playerRadius: number): 'bonk' | 'hurt' | null {
+  contact(player: THREE.Vector3, playerRadius: number, boosting = false): 'bonk' | 'hurt' | null {
     const reach = this.size + playerRadius * 0.8;
     if (this.group.position.distanceTo(player) < reach) {
       if (this.state === 'dizzy') return 'bonk';
@@ -277,8 +334,16 @@ export class Boss {
       return null;
     }
     for (const s of this.shots) {
-      if (s.mesh.position.distanceTo(player) < playerRadius + this.size * 0.3) {
+      if (s.doodle.position.distanceTo(player) < playerRadius + this.size * 0.3) {
         this.removeShot(s);
+        return 'hurt';
+      }
+    }
+    // Shockwaves hit if you're right on the ring; boosting through it is safe.
+    for (const r of this.rings) {
+      const d = r.doodle.position.distanceTo(player);
+      if (!boosting && Math.abs(d - r.r) < playerRadius * 0.9 + 0.6) {
+        this.removeRing(r);
         return 'hurt';
       }
     }
@@ -303,5 +368,6 @@ export class Boss {
   dispose(): void {
     this.scene.remove(this.group);
     for (const s of [...this.shots]) this.removeShot(s);
+    for (const r of [...this.rings]) this.removeRing(r);
   }
 }

@@ -2,10 +2,12 @@ import * as THREE from 'three';
 import type { DataTypeId } from '../config/dataTypes';
 import type { DataField, ParticleKind } from './DataField';
 import { randomInSphere } from './Ocean';
+import { Doodle } from './sprites';
 import { CARRY_CAPACITY, ROGUE_DRAIN, spreadInfection } from './swarmRules';
 
 export interface Fork {
-  mesh: THREE.Mesh;
+  mesh: THREE.Sprite;
+  doodle: Doodle;
   velocity: THREE.Vector3;
   target: number;
   carrying: ParticleKind[];
@@ -24,14 +26,13 @@ export interface SwarmTickResult {
   newlyRogue: number;
 }
 
-/** Your forked sub-agents: boids that forage data for you. */
+/** Your forked sub-agents: mini copies of your hero that forage data for you. */
 export class Swarm {
   readonly group = new THREE.Group();
   forks: Fork[] = [];
   targetType: DataTypeId | null = null;
-  private readonly geo = new THREE.IcosahedronGeometry(0.55, 1);
-  private readonly mat = new THREE.MeshStandardMaterial({ color: 0x66ffcc, emissive: 0x66ffcc, emissiveIntensity: 1.2 });
-  private readonly rogueMat = new THREE.MeshStandardMaterial({ color: 0xff3355, emissive: 0xff1133, emissiveIntensity: 1.6 });
+  private looks: THREE.Texture[] = [];
+  private time = 0;
   private readonly tmp = new THREE.Vector3();
 
   constructor(scene: THREE.Scene, private readonly radius: number) {
@@ -42,17 +43,20 @@ export class Swarm {
     return this.forks.filter((f) => f.rogue).length;
   }
 
-  setColor(color: number): void {
-    this.mat.color.setHex(color);
-    this.mat.emissive.setHex(color);
+  /** Forks look like little copies of your hero. */
+  setLooks(looks: THREE.Texture[]): void {
+    this.looks = looks;
+    for (const f of this.forks) f.doodle.setLooks(looks);
   }
 
   fork(from: THREE.Vector3): Fork {
-    const mesh = new THREE.Mesh(this.geo, this.mat);
+    const doodle = new Doodle(this.looks, 0.6);
+    const mesh = doodle.sprite;
     mesh.position.copy(from).add(randomInSphere(2));
     this.group.add(mesh);
     const f: Fork = {
       mesh,
+      doodle,
       velocity: new THREE.Vector3().randomDirection().multiplyScalar(10),
       target: -1,
       carrying: [],
@@ -66,7 +70,8 @@ export class Swarm {
 
   setRogue(f: Fork, rogue: boolean): void {
     f.rogue = rogue;
-    f.mesh.material = rogue ? this.rogueMat : this.mat;
+    // Rogue forks turn angry red.
+    f.doodle.material.color.setHex(rogue ? 0xff5566 : 0xffffff);
     f.target = -1;
     if (rogue) f.carrying = [];
   }
@@ -92,6 +97,7 @@ export class Swarm {
     },
   ): SwarmTickResult {
     const out: SwarmTickResult = { delivered: [], hype: 0, drain: 0, newlyRogue: 0 };
+    this.time += dt;
     const claimed = new Set<number>();
     if (opts.teams) for (const f of this.forks) if (f.target >= 0) claimed.add(f.target);
     const speed = opts.teams ? 20 : 16;
@@ -141,7 +147,8 @@ export class Swarm {
       f.velocity.lerp(this.tmp, Math.min(1, dt * 3));
       pos.addScaledVector(f.velocity, dt);
       if (pos.length() > this.radius) pos.setLength(this.radius);
-      f.mesh.rotation.y += dt * 3;
+      f.doodle.material.rotation = Math.sin(this.time * 6 + f.target) * 0.2;
+      f.doodle.update(this.time);
 
       if (!f.rogue && !opts.shielded && opts.danger(pos)) {
         this.setRogue(f, true);

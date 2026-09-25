@@ -220,6 +220,8 @@ export interface PickupEffect {
   cures?: string;
   /** Scares off hunters of this kind for a moment. */
   scatters?: HunterKind;
+  /** Grants a timed power-up (see `powerups.ts`). */
+  power?: string;
 }
 
 export type MiniGameSpec =
@@ -234,14 +236,16 @@ export interface ShopCustomer {
   options: { label: string; cash: number; note: string }[];
 }
 
+export type BossPattern = 'charge' | 'spray' | 'summon' | 'orbit' | 'bounce' | 'shockwave';
+
 /** A rival-lab boss fight. Taunts are lines for the cartoon rival, never quotes from real people. */
 export interface BossSpec {
   name: string;
   /** Matches a lab in `labs.ts`, for its color and emblem. */
   org: string;
   hp: number;
-  /** How it attacks between dizzy spells. */
-  pattern: 'charge' | 'spray' | 'summon' | 'orbit';
+  /** How it attacks between dizzy spells. A list cycles one pattern per attack phase. */
+  pattern: BossPattern | BossPattern[];
   /** Relative to the player. */
   size: number;
   taunts: string[];

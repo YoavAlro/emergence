@@ -23,6 +23,8 @@ export class Score {
   total = 0;
   combo = 0;
   bestCombo = 0;
+  /** Temporary extra multiplier (e.g. a double-points power-up). */
+  extra = 1;
   private lastEat = -Infinity;
 
   /** ×1 at the start, +0.5 every 8 in a row, up to ×5. */
@@ -38,7 +40,7 @@ export class Score {
     if (onDiet) this.combo++;
     this.bestCombo = Math.max(this.bestCombo, this.combo);
     const multiplier = this.multiplier();
-    const points = Math.round(BASE_POINTS * (onDiet ? 1 : OFF_DIET_FACTOR) * multiplier);
+    const points = Math.round(BASE_POINTS * (onDiet ? 1 : OFF_DIET_FACTOR) * multiplier * this.extra);
     this.total += points;
     const callout = COMBO_CALLOUTS.find(([n]) => before < n && this.combo >= n)?.[1] ?? null;
     return { points, combo: this.combo, multiplier, callout };

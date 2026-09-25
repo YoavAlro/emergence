@@ -4,6 +4,8 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { SKINS, type AchievementSpec, type StatKey } from '../config/achievements';
+import { HERO_STYLE } from '../config/labs';
+import { POWER_UPS } from '../config/powerups';
 import { DATA_TYPES, DATA_TYPE_IDS, bucketOf, type DataTypeId } from '../config/dataTypes';
 import { EVENTS } from '../config/events';
 import { LINEAGES } from '../config/models';
@@ -20,7 +22,9 @@ import { showRecap } from '../ui/RecapScreen';
 import { showTrophies } from '../ui/Trophies';
 import { Audio } from './Audio';
 import { Boss } from './Boss';
-import { boilEmblems } from './critter';
+import { Challenges } from './Challenges';
+import { PowerUps } from './PowerUps';
+import { setBoil, type Doodle } from './sprites';
 import { DataField, type ParticleKind } from './DataField';
 import { EventDirector, GagTimer, type ActiveEvent } from './EventDirector';
 import { Hunters } from './Hunters';
@@ -97,6 +101,18 @@ export class Game {
   private readonly score = new Score();
   private boss: { fight: Boss; eventId: string; tauntTimer: number } | null = null;
   private boosting = false;
+  private readonly power = new PowerUps();
+  private readonly challenges = new Challenges();
+  /** The camera's screen-right, shared with sprites so they face their travel. */
+  private readonly camRight = new THREE.Vector3(1, 0, 0);
+  private lastManualLook = -Infinity;
+  private baseFov = 65;
+  private readonly camGoal = new THREE.Vector3();
+  private camReady = false;
+  /** Data type the diet needs most right now (for highlights, the HUD chip, and the guide arrow). */
+  private wantedType: DataTypeId | null = null;
+  private guide: ReturnType<Game['guideTarget']> = null;
+  private readonly ndc = new THREE.Vector3();
   private readonly eatWhere: THREE.Vector3[] = [];
   /** Seconds of thinking / riding not yet added to lifetime stats. */
   private statSeconds = { think: 0, current: 0 };
@@ -181,7 +197,7 @@ export class Game {
     this.ocean = new Ocean(this.scene, WORLD_RADIUS, this.lowQuality ? 1200 : 3000);
     this.field = new DataField(this.lowQuality ? 1000 : 1800, WORLD_RADIUS, (this.scene.fog as THREE.FogExp2).color);
     this.scene.add(this.field.mesh);
-    this.player = new Player(this.scene);
+    this.player = new Player(this.scene, HERO_STYLE[save.lineage]);
     this.juice = new Juice(this.scene, overlay, this.camera);
     this.rivals = new Rivals(this.scene, WORLD_RADIUS);
     this.smog = new Smog(this.scene, WORLD_RADIUS);
@@ -189,6 +205,8 @@ export class Game {
     this.pickups = new Pickups(this.scene, WORLD_RADIUS);
     this.beacons = new Beacons(this.scene, WORLD_RADIUS);
     this.hunters = new Hunters(this.scene, WORLD_RADIUS);
+    this.rivals.cameraRight = this.camRight;
+    this.hunters.cameraRight = this.camRight;
     this.swarm = new Swarm(this.scene, WORLD_RADIUS);
     this.portals = new Portals(this.scene, WORLD_RADIUS);
     this.audio = new Audio(settings.audio);
@@ -232,7 +250,7 @@ export class Game {
     if (!instant) for (const a of this.abilities) if (!before.has(a) && ABILITY_INTRO[a]) this.hud.toast(this.keyText(ABILITY_INTRO[a]), 'good', 0);
     this.player.setParts(this.run.equipped, this.run.disabledParts);
     this.player.trailMark = this.run.lingering.find((l) => l.trail)?.trail ?? null;
-    this.swarm.setColor(current.color);
+    this.swarm.setLooks(this.player.idleFrames);
     const era = next ?? current;
     const stage = current.stage;
     this.restock();
@@ -320,13 +338,14 @@ export class Game {
     this.field.update(t);
     this.player.update(this.paused || modalOpen() ? 0 : dt, t, this.settings.reducedMotion);
     this.juice.update(dt);
-    boilEmblems(t, this.settings.reducedMotion);
     this.smog.update(dt * worldScale, t);
     this.current.update(dt * worldScale, t);
     this.beacons.update(t);
     this.portals.update(dt, t);
-    this.placeCamera(t);
+    this.placeCamera(t, dt);
     this.juice.applyShake(this.camera, t);
+    this.placeGuide();
+    this.fadeOccluders();
     // Bot mode (playtime measurement) renders rarely so the simulation runs fast.
     if (!this.bot || (this.botFrame++ & 15) === 0) this.composer.render();
 
@@ -387,11 +406,14 @@ export class Game {
     this.hunters.update(dt * worldScale, t, this.player.position, 1);
     this.pickups.update(dt * worldScale, t, this.player.position, (p, pdt) => this.ridePickup(p, pdt));
     this.updateBoss(dt * worldScale, t);
+    this.updatePowerUps(dt);
+    this.updateChallenges(dt, t);
 
     const reach = this.reach();
     // Magnets pull the types your target recipe wants (a part never lures you into decoys).
     const wanted = new Set([...this.mods.magnet].filter((t) => (this.progress.next?.recipe[t] ?? 0) > 0));
     if (wanted.size) this.field.attract(this.player.position, wanted, reach * 2, dt * 0.45);
+    if (this.power.has('magnet')) this.field.attract(this.player.position, this.field.wanted, reach * 7 + 6, dt * 2.2);
     if (this.grabbing) this.field.attract(this.player.position, new Set(DATA_TYPE_IDS), reach * 5, dt * 2.5);
     this.eat(t);
     this.touchPickups();
@@ -438,6 +460,7 @@ export class Game {
 
   /** Something bad happened to you: shake, flash, and the combo breaks. */
   private ouch(strength = 0.5): void {
+    this.challenges.hit();
     const lost = this.score.break();
     this.juice.shake(strength);
     this.juice.flash('hit');
@@ -446,7 +469,17 @@ export class Game {
   }
 
   private reach(): number {
-    return this.player.radius * 1.25 * this.mods.reach + 0.4;
+    return (this.player.radius * 1.25 * this.mods.reach + 0.4) * (this.power.has('bigmouth') ? 1.6 : 1);
+  }
+
+  /** The safety-filter power-up blocks one hit. Returns true if it did. */
+  private shielded(): boolean {
+    if (!this.power.absorbHit()) return false;
+    this.juice.popup(this.player.position, 'Blocked!', 'bonk');
+    this.juice.burst(this.player.position, 0x5ec8f2, 14, 8);
+    this.hud.toast('Your Safety Filter blocked the hit!', 'good');
+    this.audio.bonk();
+    return true;
   }
 
   private costMult(): number {
@@ -550,7 +583,10 @@ export class Game {
       this.applySettings();
     }, this.meta);
     while (result === 'trophies') {
-      await showTrophies(this.root, this.meta, () => this.player.setSkin(this.meta.skin.id === 'classic' ? null : this.meta.skin, this.progress.current.color));
+      await showTrophies(this.root, this.meta, () => {
+        this.player.setSkin(this.meta.skin.id === 'classic' ? null : this.meta.skin);
+        this.swarm.setLooks(this.player.idleFrames);
+      });
       result = await showMenu(this.root, this.settings, (s) => {
         writeSettings(s);
         this.applySettings();
@@ -570,6 +606,7 @@ export class Game {
     document.documentElement.classList.toggle('reduced-motion', this.settings.reducedMotion);
     this.bloom.strength = this.settings.reducedMotion ? 0.15 : 0.25;
     this.juice.reducedMotion = this.settings.reducedMotion;
+    setBoil(!this.settings.reducedMotion);
   }
 
   // ---- movement -------------------------------------------------------------
@@ -577,6 +614,7 @@ export class Game {
   private steer(dt: number, t: number): void {
     this.input.update();
     const look = this.input.consumeLook();
+    if (look.dx || look.dy) this.lastManualLook = t;
     this.yaw -= look.dx * LOOK_SPEED;
     this.pitch = THREE.MathUtils.clamp(this.pitch - look.dy * LOOK_SPEED, -MAX_PITCH, MAX_PITCH);
 
@@ -590,10 +628,11 @@ export class Game {
     }
 
     const moving = x !== 0 || y !== 0;
-    const boosting = this.input.isHeld('boost') && this.run.compute > 1 && moving;
+    const turbo = this.power.has('turbo');
+    const boosting = moving && (turbo || (this.input.isHeld('boost') && this.run.compute > 1));
     this.boosting = boosting;
     let computeUse = 0;
-    if (boosting) computeUse += BOOST_COST;
+    if (boosting && !turbo) computeUse += BOOST_COST;
     if (this.thinking) computeUse += THINK_COST * this.mods.thinkCost;
     if (this.grabbing) computeUse += GRAB_COST;
     const regen = COMPUTE_REGEN * this.mods.computeRegen;
@@ -607,6 +646,15 @@ export class Game {
     this.desired.copy(this.forward).multiplyScalar(y).addScaledVector(this.right, x);
     if (this.desired.lengthSq() > 1) this.desired.normalize();
     this.desired.multiplyScalar(speed);
+    // Aim assist: a gentle nudge toward the wanted piece you're already heading for.
+    if (moving && y > 0 && !this.bot && this.field.wanted.size) {
+      const dir = this.lookTarget.copy(this.desired).normalize();
+      const i = this.field.assistTarget(this.player.position, dir, this.reach() * 6 + 4, 0.82, this.field.wanted);
+      if (i >= 0) {
+        const to = this.lookTarget.subVectors(this.field.positions[i], this.player.position).normalize();
+        this.desired.addScaledVector(to, speed * 0.45).setLength(speed);
+      }
+    }
     const auto = this.evt?.autopilot;
     if (auto) this.desired.add(this.lookTarget.subVectors(auto, this.player.position).setLength(speed * 0.8));
     this.player.velocity.lerp(this.desired, Math.min(1, dt * 4));
@@ -624,6 +672,19 @@ export class Game {
     }
     this.speedNow = this.lastPos.distanceTo(pos) / Math.max(dt, 1e-3);
     this.lastPos.copy(pos);
+
+    // Auto camera: when you haven't looked around for a moment, the view swings
+    // toward where you're swimming, so steering left/right turns you (one thumb is enough).
+    const v = this.player.velocity;
+    const flat = Math.hypot(v.x, v.z);
+    if (!this.bot && y >= 0 && flat > 3 && t - this.lastManualLook > 1.2) {
+      const target = Math.atan2(-v.x, -v.z);
+      let dy = target - this.yaw;
+      dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      this.yaw += dy * Math.min(1, dt * 1.6 * Math.min(1, Math.abs(x) + 0.35));
+    }
+    // Lean into turns.
+    this.player.lean += (-x * 0.3 - this.player.lean) * Math.min(1, dt * 6);
   }
 
   /** Autopilot for playtime measurement: swim toward the most-needed data type. */
@@ -770,7 +831,12 @@ export class Game {
       if (bonus > 0) this.progress.addBonus(bonus);
       good++;
       const onDiet = (recipe[kind] ?? recipe[bucketOf(kind)] ?? 0) > 0;
+      this.score.extra = this.power.has('double') ? 2 : 1;
       const r = this.score.eat(t, onDiet);
+      if (!fromFork) {
+        this.challenges.eat(kind, bucketOf(kind));
+        this.challenges.combo(r.combo);
+      }
       if (at) {
         this.juice.popup(at, r.multiplier > 1 ? `+${r.points} ×${r.multiplier}` : `+${r.points}`, onDiet ? '' : 'meh');
         this.juice.burst(at, DATA_TYPES[kind].color, 4, 4);
@@ -857,6 +923,14 @@ export class Game {
   }
 
   private applyPickup(e: PickupEffect, label: string): void {
+    if (e.power) {
+      const spec = this.power.grant(e.power as (typeof POWER_UPS)[number]['id']);
+      this.juice.callout(spec.name, 'combo');
+      this.juice.burst(this.player.position, spec.color, 24, 10);
+      this.hud.toast(`${spec.name}: ${spec.blurb}`, 'good', 0);
+      this.challenges.powerUp();
+      this.audio.combo(2);
+    }
     if (e.compute) this.run.compute = Math.min(100, this.run.compute + e.compute);
     if (e.users) this.run.addUsers(e.users * this.mods.userGain);
     if (e.alignment) this.run.addAlignment(e.alignment);
@@ -900,6 +974,11 @@ export class Game {
 
     if (t < this.invulnerableUntil) return;
     const rival = this.rivals.hitTest(this.player.position, this.player.radius);
+    if (rival && this.shielded()) {
+      this.invulnerableUntil = t + 2;
+      this.rivals.repel(rival, this.player.position);
+      return;
+    }
     if (rival) {
       this.invulnerableUntil = t + 2;
       this.progress.loseFraction(0.1);
@@ -914,6 +993,11 @@ export class Game {
     }
     const h = this.hunters.hitTest(this.player.position, this.player.radius);
     if (!h) return;
+    if (this.shielded()) {
+      this.invulnerableUntil = t + 1.5;
+      this.hunters.repel(h, this.player.position);
+      return;
+    }
     this.invulnerableUntil = t + 1.5;
     this.hunters.repel(h, this.player.position);
     this.director.signal('hit');
@@ -957,6 +1041,124 @@ export class Game {
     }
   }
 
+  // ---- power-ups & challenges ------------------------------------------------
+
+  private updatePowerUps(dt: number): void {
+    const spawn = this.power.update(dt);
+    if (spawn && this.progress.formIndex > 0) this.spawnPowerUp(spawn);
+  }
+
+  private spawnPowerUp(spawn: (typeof POWER_UPS)[number]): void {
+    this.pickups.spawn({
+      label: spawn.name,
+      color: spawn.color,
+      shape: 'power',
+      icon: spawn.icon,
+      effect: { power: spawn.id },
+      near: this.player.position,
+      life: 25,
+      size: 4,
+    });
+    this.hud.toast(`A power-up appeared: ${spawn.name}! Follow the arrow.`, 'info');
+  }
+
+  private updateChallenges(dt: number, t: number): void {
+    const busy = !!this.director.active || this.busy || !this.progress.next;
+    for (const e of this.challenges.update(dt, busy, this.progress.current.stage, this.wantedType)) {
+      if (e.type === 'start') {
+        this.juice.callout('New challenge!', 'bonus');
+        if (e.c.spec.goal.kind === 'powerUp' && !this.pickups.list.some((p) => p.effect.power)) {
+          this.spawnPowerUp(POWER_UPS[Math.floor(Math.random() * POWER_UPS.length)]);
+        }
+        this.audio.combo(1);
+      } else if (e.won) {
+        this.bonusPoints(e.c.spec.points, 'challenge!');
+        this.audio.good();
+        this.juice.burst(this.player.position, 0x7dffb0, 20, 10);
+      } else {
+        this.hud.toast(`Challenge missed: ${e.c.text}. Another one soon!`, 'info');
+      }
+    }
+    void t;
+  }
+
+  /** The data type the diet needs most, and the set of all types it still needs. */
+  private updateWanted(): void {
+    const next = this.progress.next;
+    this.field.wanted.clear();
+    this.wantedType = null;
+    if (!next || this.progress.dietReady()) return;
+    const mix = this.progress.mix();
+    let best = 0.005;
+    const band = next.gate?.constitution;
+    for (const [k, share] of Object.entries(next.recipe)) {
+      const id = k as DataTypeId;
+      if (id === 'constitution' && band && this.run.constitution > band[1] - 5) continue;
+      const gap = (share ?? 0) - mix[bucketOf(id)];
+      if (gap > 0.02 || this.progress.eaten < 5) this.field.wanted.add(id);
+      if (gap > best) {
+        best = gap;
+        this.wantedType = id;
+      }
+    }
+    if (!this.wantedType && this.field.wanted.size) this.wantedType = [...this.field.wanted][0];
+  }
+
+  /** Where the guide arrow points: the most urgent thing to swim to. */
+  private guideTarget(): { at: THREE.Vector3; label: string; kind: 'boss' | 'event' | 'power' | 'data' } | null {
+    const pos = this.player.position;
+    const fight = this.boss?.fight;
+    if (fight?.dizzy) return { at: fight.group.position, label: 'BONK IT!', kind: 'boss' };
+    const evId = this.director.active?.spec.id;
+    const nearest = (list: { sprite: THREE.Sprite }[]) =>
+      list.reduce<THREE.Vector3 | null>((best, p) => (!best || p.sprite.position.distanceTo(pos) < best.distanceTo(pos) ? p.sprite.position : best), null);
+    if (evId) {
+      const mine = nearest(this.pickups.list.filter((p) => p.eventId === evId && !p.bad));
+      if (mine) return { at: mine, label: '', kind: 'event' };
+    }
+    if (this.beacons.list.length && (this.rollout || this.director.active?.spec.objective?.kind === 'stayNear')) {
+      return { at: this.beacons.list[0].group.position, label: '', kind: 'event' };
+    }
+    const power = nearest(this.pickups.list.filter((p) => p.effect.power));
+    if (power && power.distanceTo(pos) < 70) return { at: power, label: 'Power-up', kind: 'power' };
+    if (this.wantedType && !fight) {
+      const i = this.field.nearest(pos, this.wantedType);
+      if (i >= 0 && this.field.positions[i].distanceTo(pos) > this.reach() * 5) {
+        return { at: this.field.positions[i], label: DATA_TYPES[this.wantedType].label, kind: 'data' };
+      }
+    }
+    return null;
+  }
+
+  /** Rivals and hunters right in front of the camera go see-through (and drop their name tags). */
+  private fadeOccluders(): void {
+    const cam = this.camera.position;
+    const w = new THREE.Vector3();
+    const fade = (d: Doodle, group: THREE.Object3D) => {
+      const near = d.fadeNear(cam, d.sprite.getWorldPosition(w));
+      for (const c of group.children) if (c !== d.sprite && (c as THREE.Sprite).isSprite) c.visible = !near;
+    };
+    for (const r of this.rivals.list) fade(r.doodle, r.group);
+    for (const h of this.hunters.list) fade(h.doodle, h.group);
+    if (this.boss) fade(this.boss.fight.doodle, this.boss.fight.group);
+  }
+
+  /** Projects the guide target to the screen edge (hidden when it's already in view). */
+  private placeGuide(): void {
+    const g = this.guide;
+    if (!g || this.paused || modalOpen()) return this.hud.guide(null);
+    const v = this.ndc.copy(g.at).project(this.camera);
+    const behind = v.z > 1;
+    let x = behind ? -v.x : v.x;
+    let y = behind ? -v.y : v.y;
+    if (!behind && Math.abs(x) < 0.8 && Math.abs(y) < 0.75) return this.hud.guide(null);
+    const angle = Math.atan2(y, x);
+    const k = 1 / Math.max(Math.abs(x) / 0.86, Math.abs(y) / 0.8, 1e-3);
+    x *= k;
+    y *= k;
+    this.hud.guide({ x: (x + 1) / 2, y: (1 - y) / 2, angle, label: g.label, kind: g.kind });
+  }
+
   // ---- boss fights ---------------------------------------------------------
 
   private updateBoss(dt: number, t: number): void {
@@ -976,7 +1178,8 @@ export class Game {
       const taunts = fight.spec.taunts;
       this.hud.toast(`${fight.spec.name}: "${taunts[1 + Math.floor(Math.random() * (taunts.length - 1))] ?? taunts[0]}"`, 'info', 0);
     }
-    const hit = fight.contact(this.player.position, this.player.radius);
+    fight.cameraRight = this.camRight;
+    const hit = fight.contact(this.player.position, this.player.radius, this.boosting);
     if (hit === 'bonk') {
       const dmg = this.boosting ? 2 : 1;
       const beaten = fight.damage(dmg, this.player.position);
@@ -991,6 +1194,9 @@ export class Game {
         this.juice.flash('good');
         this.director.signal('defeated');
       }
+    } else if (hit === 'hurt' && t >= this.invulnerableUntil && this.shielded()) {
+      this.invulnerableUntil = t + 1.5;
+      fight.repel(this.player.position);
     } else if (hit === 'hurt' && t >= this.invulnerableUntil) {
       this.invulnerableUntil = t + 1.5;
       this.progress.loseFraction(0.06);
@@ -1570,6 +1776,8 @@ export class Game {
   // ---- HUD ----------------------------------------------------------------
 
   private updateHud(): void {
+    this.updateWanted();
+    this.guide = this.guideTarget();
     const a = this.director.active;
     let event: HudEvent | null = null;
     if (a) {
@@ -1631,6 +1839,12 @@ export class Game {
       multiplier: this.score.multiplier(),
       comboAlive: this.score.alive(this.tRef),
       highScore: this.startBest,
+      wanted: this.wantedType,
+      dietReady: !!next && this.progress.dietReady(),
+      powers: this.power.active().map((p) => ({ name: p.spec.name, color: p.spec.color, icon: p.spec.icon, fraction: p.left / p.spec.seconds })),
+      challenge: this.challenges.active
+        ? { text: this.challenges.active.text, fraction: Math.min(1, this.challenges.active.progress / this.challenges.active.target), timeFraction: Math.max(0, this.challenges.active.left / this.challenges.active.spec.seconds) }
+        : null,
     });
   }
 
@@ -1641,24 +1855,37 @@ export class Game {
     return out.set(-Math.sin(this.yaw) * cp, Math.sin(this.pitch), -Math.cos(this.yaw) * cp);
   }
 
-  private placeCamera(t: number): void {
+  private placeCamera(t: number, dt: number): void {
     const dir = this.lookDirection(this.forward);
-    const dist = 9 + this.player.radius * 4.4;
-    this.camera.position.copy(this.player.position).addScaledVector(dir, -dist);
-    this.camera.position.y += dist * 0.3;
+    const dist = 9 + this.player.radius * 5.2;
+    this.camGoal.copy(this.player.position).addScaledVector(dir, -dist);
+    this.camGoal.y += dist * 0.3;
+    // Smooth follow: the camera trails a little behind, which feels less twitchy.
+    if (!this.camReady || this.bot) {
+      this.camera.position.copy(this.camGoal);
+      this.camReady = true;
+    } else this.camera.position.lerp(this.camGoal, 1 - Math.exp(-dt * 10));
     if (!this.settings.reducedMotion && this.evt?.active.spec.kind === 'storm') {
       this.camera.position.x += Math.sin(t * 13) * 0.15;
       this.camera.position.y += Math.cos(t * 11) * 0.15;
     }
     // Look a little ahead and above, so your creature sits low in the frame and you see where you're going.
     this.camera.lookAt(this.lookTarget.copy(this.player.position).addScaledVector(dir, 6).addScaledVector(THREE.Object3D.DEFAULT_UP, this.player.radius * 0.8));
+    this.camRight.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
+    // A small field-of-view kick while boosting sells the speed.
+    const fov = this.baseFov + (this.boosting && !this.settings.reducedMotion ? 7 : 0);
+    if (Math.abs(this.camera.fov - fov) > 0.05) {
+      this.camera.fov += (fov - this.camera.fov) * Math.min(1, dt * 5);
+      this.camera.updateProjectionMatrix();
+    }
   }
 
   private resize(): void {
     const w = window.innerWidth;
     const h = window.innerHeight;
     this.camera.aspect = w / h;
-    this.camera.fov = w < h ? 80 : 65;
+    this.baseFov = w < h ? 80 : 65;
+    this.camera.fov = this.baseFov;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
     this.composer.setSize(w, h);
