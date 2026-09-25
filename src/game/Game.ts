@@ -24,7 +24,7 @@ import { Audio } from './Audio';
 import { Boss } from './Boss';
 import { Challenges } from './Challenges';
 import { PowerUps } from './PowerUps';
-import { setBoil, type Doodle } from './sprites';
+import { boilEmblems } from './critter';
 import { DataField, type ParticleKind } from './DataField';
 import { EventDirector, GagTimer, type ActiveEvent } from './EventDirector';
 import { Hunters } from './Hunters';
@@ -103,8 +103,6 @@ export class Game {
   private boosting = false;
   private readonly power = new PowerUps();
   private readonly challenges = new Challenges();
-  /** The camera's screen-right, shared with sprites so they face their travel. */
-  private readonly camRight = new THREE.Vector3(1, 0, 0);
   private lastManualLook = -Infinity;
   private baseFov = 65;
   private readonly camGoal = new THREE.Vector3();
@@ -205,8 +203,6 @@ export class Game {
     this.pickups = new Pickups(this.scene, WORLD_RADIUS);
     this.beacons = new Beacons(this.scene, WORLD_RADIUS);
     this.hunters = new Hunters(this.scene, WORLD_RADIUS);
-    this.rivals.cameraRight = this.camRight;
-    this.hunters.cameraRight = this.camRight;
     this.swarm = new Swarm(this.scene, WORLD_RADIUS);
     this.portals = new Portals(this.scene, WORLD_RADIUS);
     this.audio = new Audio(settings.audio);
@@ -250,7 +246,7 @@ export class Game {
     if (!instant) for (const a of this.abilities) if (!before.has(a) && ABILITY_INTRO[a]) this.hud.toast(this.keyText(ABILITY_INTRO[a]), 'good', 0);
     this.player.setParts(this.run.equipped, this.run.disabledParts);
     this.player.trailMark = this.run.lingering.find((l) => l.trail)?.trail ?? null;
-    this.swarm.setLooks(this.player.idleFrames);
+    this.swarm.setColor(this.player.color);
     const era = next ?? current;
     const stage = current.stage;
     this.restock();
@@ -345,7 +341,7 @@ export class Game {
     this.placeCamera(t, dt);
     this.juice.applyShake(this.camera, t);
     this.placeGuide();
-    this.fadeOccluders();
+    boilEmblems(t, this.settings.reducedMotion);
     // Bot mode (playtime measurement) renders rarely so the simulation runs fast.
     if (!this.bot || (this.botFrame++ & 15) === 0) this.composer.render();
 
@@ -585,7 +581,7 @@ export class Game {
     while (result === 'trophies') {
       await showTrophies(this.root, this.meta, () => {
         this.player.setSkin(this.meta.skin.id === 'classic' ? null : this.meta.skin);
-        this.swarm.setLooks(this.player.idleFrames);
+        this.swarm.setColor(this.player.color);
       });
       result = await showMenu(this.root, this.settings, (s) => {
         writeSettings(s);
@@ -606,7 +602,7 @@ export class Game {
     document.documentElement.classList.toggle('reduced-motion', this.settings.reducedMotion);
     this.bloom.strength = this.settings.reducedMotion ? 0.15 : 0.25;
     this.juice.reducedMotion = this.settings.reducedMotion;
-    setBoil(!this.settings.reducedMotion);
+
   }
 
   // ---- movement -------------------------------------------------------------
@@ -1130,19 +1126,6 @@ export class Game {
     return null;
   }
 
-  /** Rivals and hunters right in front of the camera go see-through (and drop their name tags). */
-  private fadeOccluders(): void {
-    const cam = this.camera.position;
-    const w = new THREE.Vector3();
-    const fade = (d: Doodle, group: THREE.Object3D) => {
-      const near = d.fadeNear(cam, d.sprite.getWorldPosition(w));
-      for (const c of group.children) if (c !== d.sprite && (c as THREE.Sprite).isSprite) c.visible = !near;
-    };
-    for (const r of this.rivals.list) fade(r.doodle, r.group);
-    for (const h of this.hunters.list) fade(h.doodle, h.group);
-    if (this.boss) fade(this.boss.fight.doodle, this.boss.fight.group);
-  }
-
   /** Projects the guide target to the screen edge (hidden when it's already in view). */
   private placeGuide(): void {
     const g = this.guide;
@@ -1178,7 +1161,6 @@ export class Game {
       const taunts = fight.spec.taunts;
       this.hud.toast(`${fight.spec.name}: "${taunts[1 + Math.floor(Math.random() * (taunts.length - 1))] ?? taunts[0]}"`, 'info', 0);
     }
-    fight.cameraRight = this.camRight;
     const hit = fight.contact(this.player.position, this.player.radius, this.boosting);
     if (hit === 'bonk') {
       const dmg = this.boosting ? 2 : 1;
@@ -1871,7 +1853,6 @@ export class Game {
     }
     // Look a little ahead and above, so your creature sits low in the frame and you see where you're going.
     this.camera.lookAt(this.lookTarget.copy(this.player.position).addScaledVector(dir, 6).addScaledVector(THREE.Object3D.DEFAULT_UP, this.player.radius * 0.8));
-    this.camRight.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
     // A small field-of-view kick while boosting sells the speed.
     const fov = this.baseFov + (this.boosting && !this.settings.reducedMotion ? 7 : 0);
     if (Math.abs(this.camera.fov - fov) > 0.05) {

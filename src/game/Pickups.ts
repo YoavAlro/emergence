@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { PickupEffect } from '../config/types';
-import { INK, Pen, drawIcon, type DoodleIcon } from '../ui/doodle';
+import { drawIcon, type DoodleIcon } from '../ui/doodle';
 import { hexCss } from './labels';
 import { randomInSphere } from './Ocean';
 
@@ -24,7 +24,6 @@ export interface Pickup {
 
 const textures = new Map<string, THREE.CanvasTexture>();
 
-/** A doodled sticker: wobbly ink shape, flat color, and a hand-lettered label. */
 function iconTexture(shape: PickupShape, color: number, label: string, icon?: DoodleIcon): THREE.CanvasTexture {
   const key = `${shape}|${color}|${label}|${icon ?? ''}`;
   const cached = textures.get(key);
@@ -36,64 +35,65 @@ function iconTexture(shape: PickupShape, color: number, label: string, icon?: Do
   const css = hexCss(color);
   const cx = 128;
   const cy = 100;
-  const pen = new Pen(ctx, label.length * 13 + shape.length, 2);
-  const W = 7;
-  if (shape === 'power') {
-    // A starburst sticker with the power-up's doodle inside.
-    const pts: [number, number][] = [];
+  const glow = ctx.createRadialGradient(cx, cy, 10, cx, cy, 90);
+  glow.addColorStop(0, css);
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, 256, 200);
+  ctx.fillStyle = css;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  if (shape === 'heart') {
+    ctx.moveTo(cx, cy + 40);
+    ctx.bezierCurveTo(cx - 70, cy - 10, cx - 30, cy - 60, cx, cy - 25);
+    ctx.bezierCurveTo(cx + 30, cy - 60, cx + 70, cy - 10, cx, cy + 40);
+  } else if (shape === 'shield') {
+    ctx.moveTo(cx, cy - 50);
+    ctx.lineTo(cx + 42, cy - 32);
+    ctx.lineTo(cx + 36, cy + 20);
+    ctx.lineTo(cx, cy + 50);
+    ctx.lineTo(cx - 36, cy + 20);
+    ctx.lineTo(cx - 42, cy - 32);
+    ctx.closePath();
+  } else if (shape === 'power') {
+    // A starburst badge; the power-up's doodle goes on top.
     for (let i = 0; i < 24; i++) {
       const a = (i / 24) * Math.PI * 2;
-      const r = i % 2 ? 58 : 72;
-      pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+      const r = i % 2 ? 48 : 60;
+      if (i === 0) ctx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+      else ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
     }
-    pen.path(pts, true);
-    pen.fillStroke('#fff8ec', W);
-    drawIcon(ctx, icon ?? 'star', cx, cy, 90, 0, css);
-  } else if (shape === 'heart') {
-    pen.path([[cx, cy + 44], [cx - 58, cy - 4], [cx - 44, cy - 44], [cx - 12, cy - 44], [cx, cy - 22], [cx + 12, cy - 44], [cx + 44, cy - 44], [cx + 58, cy - 4]], true);
-    pen.fillStroke(css, W);
-  } else if (shape === 'shield') {
-    pen.path([[cx, cy - 52], [cx + 44, cy - 34], [cx + 38, cy + 20], [cx, cy + 52], [cx - 38, cy + 20], [cx - 44, cy - 34]], true);
-    pen.fillStroke(css, W);
+    ctx.closePath();
   } else if (shape === 'button') {
-    pen.circle(cx, cy, 52, 20);
-    pen.fillStroke(css, W);
-    pen.circle(cx, cy, 38, 18);
-    pen.fillStroke(null, 4);
-    ctx.fillStyle = INK;
-    ctx.font = '800 34px "Baloo 2", system-ui, sans-serif';
+    ctx.arc(cx, cy, 46, 0, Math.PI * 2);
+  } else if (shape === 'creature' || shape === 'ghost') {
+    ctx.arc(cx, cy, 40, 0, Math.PI * 2);
+  } else {
+    ctx.arc(cx, cy, 32, 0, Math.PI * 2);
+  }
+  ctx.fill();
+  ctx.stroke();
+  if (shape === 'power') drawIcon(ctx, icon ?? 'star', cx, cy, 70, 0, '#fff8ec');
+  if (shape === 'button') {
+    ctx.fillStyle = '#3a2a00';
+    ctx.font = '700 40px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('RESET', cx, cy + 3);
-  } else {
-    pen.circle(cx, cy, shape === 'orb' ? 34 : 44, 16);
-    pen.fillStroke(css, W);
-    // A little shine.
-    pen.path([[cx - 16, cy - 14], [cx - 6, cy - 22]]);
-    pen.stroke(5, '#ffffff');
+    ctx.fillText('RESET', cx, cy + 2);
   }
   if (shape === 'creature' || shape === 'ghost') {
-    for (const dx of [-14, 14]) {
-      ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = '#031026';
+    for (const [dx, dy] of [[-14, -8], [14, -8], [0, 14]]) {
       ctx.beginPath();
-      ctx.arc(cx + dx, cy - 8, 9, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = INK;
-      ctx.beginPath();
-      ctx.arc(cx + dx + 2, cy - 7, 4.5, 0, Math.PI * 2);
+      ctx.arc(cx + dx, cy + dy, 7, 0, Math.PI * 2);
       ctx.fill();
     }
-    pen.path([[cx - 10, cy + 14], [cx, cy + 20], [cx + 10, cy + 14]]);
-    pen.stroke(4);
   }
-  ctx.font = '800 30px "Baloo 2", system-ui, sans-serif';
+  ctx.font = '600 30px system-ui, sans-serif';
   ctx.textAlign = 'center';
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = 8;
-  ctx.strokeStyle = INK;
-  ctx.strokeText(label, cx, 222, 244);
   ctx.fillStyle = '#ffffff';
-  ctx.fillText(label, cx, 222, 244);
+  ctx.fillText(label, cx, 230, 250);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   textures.set(key, tex);

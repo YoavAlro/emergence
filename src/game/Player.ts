@@ -1,19 +1,12 @@
 import * as THREE from 'three';
-import type { SkinSpec } from '../config/achievements';
-import type { HeroStyle } from '../config/labs';
 import { PARTS } from '../config/parts';
 import type { ModelForm, PartId } from '../config/types';
-import { drawAura, drawHero, type HeroLook } from '../ui/creatures';
-import { hexCss, makeLabel } from './labels';
-import { Doodle, frames } from './sprites';
+import type { SkinSpec } from '../config/achievements';
+import type { HeroStyle } from '../config/labs';
+import { makeLabel } from './labels';
+import { Eyes, INK_COLOR, outline, toonMat } from './toon';
 
-type Pose = 'idle' | 'chomp' | 'blink';
-
-/**
- * The player's hero: a flat, hand-drawn sprite in its lab's colors. It grows,
- * sprouts a crest, freckles, and editor parts as it evolves, and squashes and
- * leans as it swims.
- */
+/** The player's creature: a cartoon blob that grows freckles and sprouts parts as it evolves. */
 export class Player {
   readonly group = new THREE.Group();
   readonly velocity = new THREE.Vector3();
@@ -21,47 +14,87 @@ export class Player {
   /** Extra scale from size forms (e.g. Haiku / Sonnet / Opus). */
   formScale = 1;
   private targetSize = 1;
-  private readonly hero: Doodle;
-  private readonly aura: Doodle;
-  /** Faces the direction of travel; carries the grab beam. */
-  private readonly heading = new THREE.Group();
+  /** Faces the direction of travel (front is -z). */
+  private readonly body = new THREE.Group();
+  /** Squash and stretch applies here, not to the heading. */
+  private readonly squash = new THREE.Group();
+  private readonly partsGroup = new THREE.Group();
+  private readonly accessory = new THREE.Group();
+  private readonly bodyMat = toonMat(0x7fd4ff, 0.22);
+  private readonly spotMat = toonMat(0xffffff, 0.1);
+  private readonly bodyMesh: THREE.Mesh;
+  private readonly eyes: Eyes;
+  private readonly mouth: THREE.Mesh;
+  private spots: THREE.Mesh[] = [];
+  private readonly aura: THREE.Mesh;
   private readonly beam: THREE.Mesh;
   private readonly trail: THREE.Sprite[] = [];
   private trailIndex = 0;
   private trailTimer = 0;
   private chomp = 0;
   private hurt = 0;
-  private nextBlink = 2;
-  private blinkUntil = 0;
+  private readonly heading = new THREE.Quaternion();
   private readonly look = new THREE.Matrix4();
   private readonly zero = new THREE.Vector3();
-  private readonly q = new THREE.Quaternion();
+  private readonly lookLocal = new THREE.Vector3();
   private skin: SkinSpec | null = null;
-  private stage = 1;
-  private formIndex = 0;
-  private parts: { id: PartId; disabled: boolean }[] = [];
-  private poses: Record<Pose, THREE.Texture[]> | null = null;
-  private pose: Pose = 'idle';
-  /** Screen-space lean from steering (radians). */
-  lean = 0;
   thinking = false;
   grabbing = false;
   trailMark: string | null = null;
+  /** Roll into turns (radians). */
+  lean = 0;
+  private readonly bodyColor: number;
+  private readonly crest = new THREE.Group();
+  private stage = 1;
+  private baseGlow = 0.22;
 
-  constructor(private readonly scene: THREE.Scene, private readonly style: HeroStyle) {
-    this.hero = new Doodle(frames('idle-placeholder', () => {}), 1);
-    this.hero.sprite.renderOrder = 2;
-    this.aura = new Doodle(frames('aura', drawAura), 1.6, { opacity: 0.9 });
-    this.aura.sprite.visible = false;
+  constructor(
+    private readonly scene: THREE.Scene,
+    private readonly style: HeroStyle,
+  ) {
+    this.bodyColor = new THREE.Color(style.body).getHex();
+    this.bodyMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 24), this.bodyMat);
+    outline(this.bodyMesh, 0.05);
+    this.eyes = new Eyes(0.26, 0.3, this.bodyColor);
+    this.eyes.group.position.set(0, 0.28, -0.8);
+    this.eyes.group.rotation.y = Math.PI;
+    this.mouth = new THREE.Mesh(
+      new THREE.TorusGeometry(0.22, 0.06, 8, 20, Math.PI),
+      new THREE.MeshBasicMaterial({ color: INK_COLOR }),
+    );
+    this.mouth.position.set(0, -0.12, -0.95);
+    this.mouth.rotation.set(0, 0, Math.PI);
+    this.aura = new THREE.Mesh(
+      new THREE.SphereGeometry(1.6, 24, 16),
+      new THREE.MeshBasicMaterial({ color: 0xb07bff, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.BackSide }),
+    );
+    this.aura.visible = false;
     this.beam = new THREE.Mesh(
       new THREE.CylinderGeometry(0.08, 0.35, 1, 8, 1, true),
       new THREE.MeshBasicMaterial({ color: 0xc6ff4d, transparent: true, opacity: 0.55, depthWrite: false }),
     );
     this.beam.rotation.x = -Math.PI / 2;
     this.beam.visible = false;
-    this.heading.add(this.beam);
-    this.group.add(this.hero.sprite, this.aura.sprite, this.heading);
+    // The lab's look: a tummy patch and rosy cheeks in the lineage's palette.
+    const belly = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), toonMat(new THREE.Color(style.belly).getHex(), 0.2));
+    belly.scale.set(0.62, 0.5, 0.3);
+    belly.position.set(0, -0.38, -0.8);
+    const cheekMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(style.cheeks), transparent: true, opacity: 0.85 });
+    for (const sx of [-1, 1]) {
+      const cheek = new THREE.Mesh(new THREE.CircleGeometry(0.13, 14), cheekMat);
+      cheek.position.set(0.52 * sx, 0.02, -0.86);
+      cheek.lookAt(new THREE.Vector3(0.6 * sx, 0.02, -2));
+      this.squash.add(cheek);
+    }
+    this.squash.add(this.bodyMesh, belly, this.eyes.group, this.mouth, this.partsGroup, this.accessory, this.crest);
+    this.body.add(this.squash, this.aura, this.beam);
+    this.group.add(this.body);
     scene.add(this.group);
+  }
+
+  /** The hero's current body color (forks match it). */
+  get color(): number {
+    return this.skin?.color ?? this.bodyColor;
   }
 
   get position(): THREE.Vector3 {
@@ -73,45 +106,198 @@ export class Player {
     return this.size * this.formScale;
   }
 
-  /** The idle look, for sub-agent forks that look like you. */
-  get idleFrames(): THREE.Texture[] {
-    return this.poses?.idle ?? [];
-  }
-
   setForm(form: ModelForm, formIndex: number, instant = false): void {
     this.targetSize = form.size;
     if (instant) this.size = form.size;
+    this.setColor(this.skin?.color ?? this.bodyColor);
     this.stage = form.stage;
-    this.formIndex = formIndex;
-    this.redraw();
+    this.buildCrest(form.stage);
+    for (const s of this.spots) this.squash.remove(s);
+    // More freckles per version: a visible sign of growing capacity.
+    this.spots = Array.from({ length: Math.min(24, 2 + formIndex) }, (_, i) => {
+      const dot = new THREE.Mesh(new THREE.CircleGeometry(0.09 + (i % 3) * 0.03, 10), this.spotMat);
+      const dir = new THREE.Vector3().randomDirection();
+      if (dir.z < -0.4) dir.z = Math.abs(dir.z); // keep the face clear
+      dir.normalize();
+      dot.position.copy(dir).multiplyScalar(1.005);
+      dot.lookAt(dir.clone().multiplyScalar(2));
+      this.squash.add(dot);
+      return dot;
+    });
+  }
+
+  /**
+   * The lineage crest, from Stage 2 on: a four-point spark (Claude) or a looping
+   * ribbon knot (GPT). Original shapes in the lab's colors, not a logo. It grows later on.
+   */
+  private buildCrest(stage: number): void {
+    this.crest.clear();
+    if (stage < 2 || this.skin?.accessory === 'crown' || this.skin?.accessory === 'partyHat') return;
+    const color = new THREE.Color(this.style.accent).getHex();
+    const big = stage >= 5 ? 1.35 : 1;
+    let mesh: THREE.Mesh;
+    if (this.style.crest === 'spark') {
+      const shape = new THREE.Shape();
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + Math.PI / 2;
+        const r = i % 2 ? 0.1 : 0.34;
+        if (i === 0) shape.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+        else shape.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      shape.closePath();
+      mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.08, bevelEnabled: true, bevelSize: 0.03, bevelThickness: 0.03, bevelSegments: 1 }), toonMat(color, 0.35));
+      mesh.position.set(0.05, 1.25, 0);
+      if (stage >= 3) {
+        const twin = mesh.clone();
+        twin.scale.setScalar(0.4);
+        twin.position.set(0.42, 1.45, 0);
+        this.crest.add(outline(twin, 0.12));
+      }
+    } else {
+      mesh = new THREE.Mesh(new THREE.TorusKnotGeometry(0.16, 0.055, 64, 8, 2, 3), toonMat(color, 0.3));
+      mesh.position.set(0, 1.2, 0);
+    }
+    this.crest.add(outline(mesh, 0.1));
+    this.crest.scale.setScalar(big);
+    this.crest.position.y = (big - 1) * -0.9;
+  }
+
+  setColor(color: number): void {
+    this.bodyMat.color.setHex(color);
+    this.bodyMat.emissive.setHex(color);
+    // Pale bodies (the white GPT hero) would glow and lose their ink outline: less self-light.
+    const c0 = new THREE.Color(color);
+    const lum = 0.2126 * c0.r + 0.7152 * c0.g + 0.0722 * c0.b;
+    this.baseGlow = lum > 0.6 ? 0.04 : 0.22;
+    const c = new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.55);
+    this.spotMat.color.copy(c);
+    this.spotMat.emissive.copy(c);
   }
 
   /** Cosmetic skin: color and an accessory. */
   setSkin(skin: SkinSpec | null, _formColor?: number): void {
     this.skin = skin;
-    this.redraw();
+    this.setColor(skin?.color ?? this.bodyColor);
+    this.buildCrest(this.stage);
+    this.accessory.clear();
+    const acc = skin?.accessory ?? 'none';
+    if (acc === 'partyHat') {
+      const hat = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 16), toonMat(0xff5ca8, 0.2));
+      hat.position.set(0, 1.25, 0);
+      hat.rotation.z = 0.2;
+      const pom = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), toonMat(0xfff36b, 0.3));
+      pom.position.y = 0.45;
+      hat.add(pom);
+      this.accessory.add(outline(hat, 0.08));
+    } else if (acc === 'shades') {
+      for (const s of [-1, 1]) {
+        const lens = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.24, 0.08), new THREE.MeshBasicMaterial({ color: INK_COLOR }));
+        lens.position.set(0.3 * s, 0.3, -1.02);
+        this.accessory.add(lens);
+      }
+      const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.06, 0.06), new THREE.MeshBasicMaterial({ color: INK_COLOR }));
+      bridge.position.set(0, 0.33, -1.03);
+      this.accessory.add(bridge);
+    } else if (acc === 'bowtie') {
+      for (const s of [-1, 1]) {
+        const wing = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.32, 3), toonMat(0xff4d4d, 0.2));
+        wing.rotation.z = (Math.PI / 2) * s;
+        wing.position.set(0.18 * s, -0.55, -0.82);
+        this.accessory.add(outline(wing, 0.1));
+      }
+    } else if (acc === 'crown') {
+      const mat = toonMat(0xffd84d, 0.35);
+      mat.side = THREE.DoubleSide;
+      const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.34, 0.32, 6, 1, true), mat);
+      crown.position.y = 1.08;
+      this.accessory.add(crown);
+    } else if (acc === 'halo') {
+      const halo = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.06, 8, 32), new THREE.MeshBasicMaterial({ color: 0xfff6b0 }));
+      halo.rotation.x = Math.PI / 2;
+      halo.position.y = 1.35;
+      this.accessory.add(halo);
+    }
   }
 
-  /** Editor parts, drawn onto the hero (disabled ones in grey). */
+  /** Rebuilds the visible parts: limbs, eyes, tail, fins, crown, shell, antenna. */
   setParts(ids: PartId[], disabled: Set<PartId>): void {
-    this.parts = ids.filter((id) => PARTS[id]).map((id) => ({ id, disabled: disabled.has(id) }));
-    this.redraw();
-  }
-
-  private redraw(): void {
-    const base: Omit<HeroLook, 'mouthOpen' | 'blink' | 'frame'> = {
-      style: this.style,
-      body: this.skin?.color !== undefined ? hexCss(this.skin.color) : undefined,
-      stage: this.stage,
-      freckles: 2 + this.formIndex,
-      parts: this.parts.map((p) => ({ slot: PARTS[p.id].slot, color: p.disabled ? '#8a8699' : hexCss(PARTS[p.id].color) })),
-      accessory: this.skin?.accessory ?? 'none',
-    };
-    const key = JSON.stringify(base);
-    const make = (pose: Pose) =>
-      frames(`hero:${pose}:${key}`, (ctx, frame) => drawHero(ctx, { ...base, mouthOpen: pose === 'chomp', blink: pose === 'blink', frame }));
-    this.poses = { idle: make('idle'), chomp: make('chomp'), blink: make('blink') };
-    this.hero.setLooks(this.poses[this.pose]);
+    this.partsGroup.clear();
+    let limbSide = 1;
+    for (const id of ids) {
+      const part = PARTS[id];
+      if (!part) continue;
+      const mat = toonMat(disabled.has(id) ? 0x555566 : part.color, 0.25);
+      const g = new THREE.Group();
+      g.userData.slot = part.slot;
+      switch (part.slot) {
+        case 'limb': {
+          const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 0.9, 8), mat);
+          arm.position.set(0, -0.45, 0);
+          const claw = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), mat);
+          claw.position.set(0, -0.95, 0);
+          g.add(arm, claw);
+          g.position.set(0.8 * limbSide, -0.2, -0.2);
+          g.rotation.z = 0.7 * limbSide;
+          g.userData.side = limbSide;
+          limbSide = -limbSide;
+          break;
+        }
+        case 'eyes':
+          for (const s of [-1, 1]) {
+            const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.5, 6), mat);
+            stalk.position.set(0.45 * s, 0.95, -0.4);
+            stalk.rotation.z = -0.4 * s;
+            const eye = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+            eye.position.set(0.56 * s, 1.2, -0.45);
+            const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: INK_COLOR }));
+            pupil.position.set(0, 0, -0.12);
+            eye.add(pupil);
+            g.add(stalk, eye);
+          }
+          break;
+        case 'tail':
+          for (let i = 0; i < 5; i++) {
+            const seg = new THREE.Mesh(new THREE.SphereGeometry(0.24 - i * 0.035, 10, 8), mat);
+            seg.position.set(0, 0, 1 + i * 0.34);
+            g.add(seg);
+          }
+          break;
+        case 'fin':
+          for (const s of [-1, 1]) {
+            const fin = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.9, 3), mat);
+            fin.rotation.z = (-Math.PI / 2) * s;
+            fin.scale.set(1, 1, 0.3);
+            fin.position.set(1.05 * s, 0, 0.2);
+            g.add(fin);
+          }
+          break;
+        case 'crown': {
+          const ring = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.08, 8, 24), mat);
+          ring.rotation.x = Math.PI / 2;
+          ring.position.y = 1.02;
+          g.add(ring);
+          break;
+        }
+        case 'shell': {
+          const shell = new THREE.Mesh(
+            new THREE.IcosahedronGeometry(1.22, 1),
+            new THREE.MeshBasicMaterial({ color: part.color, wireframe: true, transparent: true, opacity: disabled.has(id) ? 0.12 : 0.45 }),
+          );
+          g.add(shell);
+          break;
+        }
+        case 'antenna': {
+          const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.7, 6), mat);
+          stalk.position.y = 1.2;
+          const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), mat);
+          bulb.position.y = 1.62;
+          g.add(stalk, bulb);
+          break;
+        }
+      }
+      if (part.slot !== 'shell') outline(g, 0.1);
+      this.partsGroup.add(g);
+    }
   }
 
   /** Mouth chomp when eating. */
@@ -127,45 +313,40 @@ export class Player {
   update(dt: number, t: number, reducedMotion = false): void {
     this.size += (this.targetSize - this.size) * Math.min(1, dt * 1.5);
     const speed = this.velocity.length();
-
-    // Squash and stretch: tall when fast, a gentle bob when idle.
-    const stretch = reducedMotion ? 1 : 1 + Math.min(0.18, speed / 140) + Math.sin(t * 3) * 0.025;
-    const chompSquash = 1 + Math.sin(this.chomp * Math.PI) * 0.12;
-    this.hero.radius = this.radius;
-    this.hero.squashX = chompSquash / Math.sqrt(stretch);
-    this.hero.squashY = stretch / chompSquash;
-    this.hero.material.rotation = reducedMotion ? 0 : this.lean;
-
-    this.chomp = Math.max(0, this.chomp - dt * 5);
-    if (t > this.nextBlink) {
-      this.blinkUntil = t + 0.13;
-      this.nextBlink = t + 2 + Math.random() * 3.5;
-    }
-    const pose: Pose = this.chomp > 0.3 ? 'chomp' : t < this.blinkUntil ? 'blink' : 'idle';
-    if (pose !== this.pose && this.poses) {
-      this.pose = pose;
-      this.hero.setLooks(this.poses[pose]);
-    }
-    this.hero.update(t);
-    this.hurt = Math.max(0, this.hurt - dt * 2.5);
-    this.hero.material.color.setRGB(1, 1 - this.hurt * 0.6, 1 - this.hurt * 0.6);
-
-    this.aura.sprite.visible = this.thinking;
-    if (this.thinking) {
-      this.aura.radius = this.radius * (1.55 + Math.sin(t * 5) * 0.05);
-      this.aura.update(t);
-    }
+    // Squash and stretch: long when fast, a wobble when idle.
+    const stretch = reducedMotion ? 1 : 1 + Math.min(0.22, speed / 120) + Math.sin(t * 3) * 0.02;
+    this.body.scale.setScalar(this.radius);
+    this.squash.scale.set(1 / Math.sqrt(stretch), 1 / Math.sqrt(stretch), stretch);
+    this.squash.rotation.z = reducedMotion ? 0 : this.lean;
 
     if (speed > 1) {
       this.look.lookAt(this.zero, this.velocity, THREE.Object3D.DEFAULT_UP);
-      this.q.setFromRotationMatrix(this.look);
-      this.heading.quaternion.slerp(this.q, Math.min(1, dt * 5));
+      this.heading.setFromRotationMatrix(this.look);
+      this.body.quaternion.slerp(this.heading, Math.min(1, dt * 5));
     }
+    this.lookLocal.set(Math.sin(t * 0.7) * 0.4, Math.cos(t * 0.5) * 0.3, 0);
+    this.eyes.update(t, this.lookLocal);
+
+    this.chomp = Math.max(0, this.chomp - dt * 5);
+    const open = Math.sin(this.chomp * Math.PI);
+    this.mouth.scale.set(1 + open * 0.3, 1 + open * 2.2, 1);
+    this.hurt = Math.max(0, this.hurt - dt * 2.5);
+    this.bodyMat.emissive.copy(this.bodyMat.color).lerp(new THREE.Color(1, 0.15, 0.2), this.hurt);
+    this.bodyMat.emissiveIntensity = this.baseGlow + this.hurt * 0.6;
+
+    for (const g of this.partsGroup.children) {
+      if (g.userData.slot === 'limb') g.rotation.x = Math.sin(t * 4 + (g.userData.side as number)) * 0.4;
+      if (g.userData.slot === 'fin') g.rotation.z = Math.sin(t * 6) * 0.25;
+      if (g.userData.slot === 'tail') g.rotation.y = Math.sin(t * 3) * 0.35;
+    }
+
+    this.aura.visible = this.thinking;
+    if (this.thinking) this.aura.scale.setScalar(1 + Math.sin(t * 5) * 0.08);
     this.beam.visible = this.grabbing;
     if (this.grabbing) {
-      const len = 3.5 * this.radius;
-      this.beam.scale.set(this.radius, len, this.radius);
-      this.beam.position.set(0, 0, -len / 2 - this.radius * 0.8);
+      const len = 3.5;
+      this.beam.scale.set(1, len, 1);
+      this.beam.position.set(0, 0, -len / 2 - 0.8);
     }
 
     this.updateTrail(dt);

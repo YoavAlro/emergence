@@ -1,19 +1,18 @@
 import * as THREE from 'three';
-import { drawEelHead, drawEelSegment, drawImp, drawShark } from '../ui/creatures';
-import { critterLooks, faceTravel } from './critter';
+import { makeCritter } from './critter';
 import { makeLabel } from './labels';
 import { randomInSphere } from './Ocean';
-import { Doodle, frames } from './sprites';
+import { Eyes, outline, toonMat } from './toon';
 
 export type HunterType = 'jailbreaker' | 'eel' | 'shark' | 'clone';
 
 export interface Hunter {
   type: HunterType;
   group: THREE.Group;
-  /** The main sprite (for eels: the head). */
-  doodle: Doodle;
-  /** Eel body segments. */
-  segments: Doodle[];
+  segments: THREE.Object3D[];
+  eyes: Eyes | null;
+  /** Spins in place (the jailbreaker's lock-pick halo). */
+  spinner: THREE.Object3D | null;
   velocity: THREE.Vector3;
   wander: THREE.Vector3;
   size: number;
@@ -31,14 +30,20 @@ const SPECS: Record<HunterType, { size: number; speed: number; range: number }> 
   clone: { size: 2.4, speed: 16, range: 0 },
 };
 
-/** Persistent dangers: jailbreakers, prompt-injection eels, lawyer sharks, rival clones. All doodled sprites. */
+/** Persistent dangers: jailbreakers, prompt-injection eels, lawyer sharks, rival clones. */
 export class Hunters {
   readonly group = new THREE.Group();
   list: Hunter[] = [];
   /** Think mode reveals camouflaged eels. */
   thinking = false;
-  /** Set by the Game each frame so sprites face their screen-space travel. */
-  cameraRight = new THREE.Vector3(1, 0, 0);
+  private readonly eelHiddenMat = new THREE.MeshBasicMaterial({ color: 0x8aa83a, transparent: true, opacity: 0.3 });
+  private readonly eelMat = toonMat(0xd94fe0, 0.3);
+  private readonly jbMat = toonMat(0xb04dff, 0.25);
+  private readonly pickMat = toonMat(0xffd84d, 0.3);
+  private readonly sharkMat = toonMat(0x9aa7b8, 0.15);
+  private readonly bellyMat = toonMat(0xf4efe6, 0.15);
+  private readonly toothMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  private readonly caseMat = toonMat(0x7a4a2a, 0.1);
   private readonly tmp = new THREE.Vector3();
 
   constructor(scene: THREE.Scene, private readonly radius: number) {
@@ -55,46 +60,101 @@ export class Hunters {
 
   spawn(type: HunterType, avoid: THREE.Vector3, eventId: string | null, label?: string, org?: string): Hunter {
     const spec = SPECS[type];
-    const group = new THREE.Group();
-    const segments: Doodle[] = [];
-    let doodle: Doodle;
+    let group = new THREE.Group();
+    const segments: THREE.Object3D[] = [];
+    let eyes: Eyes | null = null;
+    let spinner: THREE.Object3D | null = null;
     if (type === 'eel') {
-      // A sneaky noodle, camouflaged until you think.
-      doodle = new Doodle(frames('eel-head', drawEelHead), spec.size * 1.2, { opacity: 0.35 });
-      for (let i = 0; i < 8; i++) {
-        const seg = new Doodle(frames('eel-seg', drawEelSegment), spec.size * (1 - i * 0.08), { opacity: 0.35 });
-        this.group.add(seg.sprite);
-        segments.push(seg);
+      // A sneaky noodle: segments that only show their true colors in Think mode.
+      for (let i = 0; i < 9; i++) {
+        const s = new THREE.Mesh(new THREE.SphereGeometry(spec.size * (1 - i * 0.07), 12, 8), this.eelHiddenMat);
+        outline(s, 0.1);
+        this.group.add(s);
+        segments.push(s);
       }
-      group.add(doodle.sprite);
+      eyes = new Eyes(spec.size * 0.35, spec.size * 0.4, 0xd94fe0);
+      eyes.group.position.set(0, spec.size * 0.4, spec.size * 0.75);
+      segments[0].add(eyes.group);
     } else if (type === 'jailbreaker') {
-      doodle = new Doodle(frames('imp', drawImp), spec.size);
+      // A mischievous imp twirling a ring of lock picks.
+      const body = new THREE.Mesh(new THREE.SphereGeometry(spec.size, 14, 10), this.jbMat);
+      outline(body, 0.08);
+      for (const sx of [-1, 1]) {
+        const horn = new THREE.Mesh(new THREE.ConeGeometry(spec.size * 0.25, spec.size * 0.8, 6), this.jbMat);
+        horn.position.set(sx * spec.size * 0.5, spec.size * 0.85, 0);
+        horn.rotation.z = -sx * 0.4;
+        outline(horn, 0.1);
+        body.add(horn);
+      }
+      eyes = new Eyes(spec.size * 0.3, spec.size * 0.35, 0xb04dff, true);
+      eyes.group.position.set(0, spec.size * 0.2, spec.size * 0.8);
+      body.add(eyes.group);
+      spinner = new THREE.Group();
+      for (let i = 0; i < 4; i++) {
+        const pick = new THREE.Mesh(new THREE.BoxGeometry(spec.size * 0.12, spec.size * 0.9, spec.size * 0.12), this.pickMat);
+        const a = (i / 4) * Math.PI * 2;
+        pick.position.set(Math.cos(a) * spec.size * 1.6, Math.sin(a) * spec.size * 1.6, 0);
+        pick.rotation.z = a;
+        outline(pick, 0.15);
+        spinner.add(pick);
+      }
+      group.add(body, spinner);
       const tag = makeLabel('Jailbreaker', '#e2c4ff');
       tag.scale.set(6, 1.5, 1);
       tag.position.y = 2.4;
-      group.add(doodle.sprite, tag);
+      group.add(tag);
     } else if (type === 'shark') {
-      doodle = new Doodle(frames('shark', drawShark), spec.size * 0.7);
+      // A lawyer shark: grey, toothy, and it brought a briefcase.
+      const body = new THREE.Mesh(new THREE.SphereGeometry(spec.size, 16, 12), this.sharkMat);
+      body.scale.set(0.75, 0.7, 1.5);
+      outline(body, 0.06);
+      const belly = new THREE.Mesh(new THREE.SphereGeometry(spec.size * 0.9, 14, 10), this.bellyMat);
+      belly.scale.set(0.65, 0.45, 1.3);
+      belly.position.y = -spec.size * 0.25;
+      const fin = new THREE.Mesh(new THREE.ConeGeometry(spec.size * 0.35, spec.size * 1.1, 4), this.sharkMat);
+      fin.position.set(0, spec.size * 0.85, -spec.size * 0.2);
+      fin.rotation.x = -0.35;
+      outline(fin, 0.08);
+      const tail = new THREE.Mesh(new THREE.ConeGeometry(spec.size * 0.5, spec.size * 0.9, 4), this.sharkMat);
+      tail.position.z = -spec.size * 1.6;
+      tail.rotation.x = Math.PI / 2;
+      tail.scale.set(0.3, 1, 1);
+      outline(tail, 0.08);
+      for (let i = 0; i < 6; i++) {
+        const tooth = new THREE.Mesh(new THREE.ConeGeometry(spec.size * 0.08, spec.size * 0.22, 3), this.toothMat);
+        tooth.position.set((i - 2.5) * spec.size * 0.14, -spec.size * 0.12, spec.size * 1.38);
+        tooth.rotation.x = Math.PI;
+        group.add(tooth);
+      }
+      const briefcase = new THREE.Mesh(new THREE.BoxGeometry(spec.size * 0.7, spec.size * 0.5, spec.size * 0.18), this.caseMat);
+      briefcase.position.set(spec.size * 0.95, -spec.size * 0.45, spec.size * 0.3);
+      outline(briefcase, 0.1);
+      eyes = new Eyes(spec.size * 0.2, spec.size * 0.35, 0x9aa7b8, true);
+      eyes.group.position.set(0, spec.size * 0.3, spec.size * 1.2);
+      group.add(body, belly, fin, tail, briefcase, eyes.group);
       const tag = makeLabel(label ?? 'Lawyer shark', '#d6e4ff');
       tag.scale.set(9, 2.2, 1);
       tag.position.y = spec.size * 2.2;
-      group.add(doodle.sprite, tag);
+      group.add(tag);
     } else {
-      doodle = new Doodle(critterLooks(org ?? ''), spec.size);
+      const critter = makeCritter(org ?? '', spec.size, 5);
+      group = critter.group;
+      eyes = critter.eyes;
       const tag = makeLabel(label ?? 'Rival', '#ffc2d6');
       tag.scale.set(10, 2.5, 1);
       tag.position.y = spec.size * 2.4;
-      group.add(doodle.sprite, tag);
+      group.add(tag);
     }
     do randomInSphere(this.radius * 0.85, group.position);
     while (group.position.distanceTo(avoid) < 35);
-    for (const s of segments) s.position.copy(group.position);
+    if (segments.length) for (const s of segments) s.position.copy(group.position);
     this.group.add(group);
     const h: Hunter = {
       type,
       group,
-      doodle,
       segments,
+      eyes,
+      spinner,
       velocity: new THREE.Vector3(),
       wander: randomInSphere(this.radius * 0.8),
       size: spec.size,
@@ -141,23 +201,26 @@ export class Hunters {
       }
       pos.addScaledVector(h.velocity, dt * speedScale);
       if (!h.sweep && pos.length() > this.radius) pos.setLength(this.radius);
-      faceTravel(h.doodle, h.velocity, this.cameraRight);
-      h.doodle.material.rotation = Math.sin(t * 4 + h.group.id) * 0.12;
-      h.doodle.update(t);
+      if (h.velocity.lengthSq() > 0.1) h.group.lookAt(this.tmp.copy(pos).add(h.velocity));
+      h.spinner?.rotateZ(dt * 4);
+      h.eyes?.update(t);
       if (h.segments.length) {
-        let prev = pos;
-        for (const seg of h.segments) {
-          const d = seg.position.distanceTo(prev);
+        h.segments[0].lookAt(this.tmp.copy(pos).add(h.velocity));
+        h.segments[0].position.copy(pos);
+        for (let i = 1; i < h.segments.length; i++) {
+          const prev = h.segments[i - 1].position;
+          const seg = h.segments[i].position;
+          const d = seg.distanceTo(prev);
           const gap = h.size * 1.3;
-          if (d > gap) seg.position.lerp(prev, (d - gap) / d);
-          prev = seg.position;
-          seg.update(t);
+          if (d > gap) seg.lerp(prev, (d - gap) / d);
         }
-        // Camouflaged: faint and green-grey until Think mode reveals them.
-        for (const d of [h.doodle, ...h.segments]) {
-          d.material.opacity = this.thinking ? 1 : 0.3;
-          d.material.color.setHex(this.thinking ? 0xffffff : 0x9ab870);
+        const mat = this.thinking ? this.eelMat : this.eelHiddenMat;
+        for (const s of h.segments) {
+          (s as THREE.Mesh).material = mat;
+          // Camouflaged eels have no ink outline: only Think mode shows their shape.
+          for (const c of s.children) if (c.userData.isOutline) c.visible = this.thinking;
         }
+        if (h.eyes) h.eyes.group.visible = this.thinking;
       }
     }
   }
@@ -185,7 +248,7 @@ export class Hunters {
 
   private remove(h: Hunter): void {
     this.group.remove(h.group);
-    for (const s of h.segments) this.group.remove(s.sprite);
+    for (const s of h.segments) this.group.remove(s);
     this.list = this.list.filter((q) => q !== h);
   }
 }
