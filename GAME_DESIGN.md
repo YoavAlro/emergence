@@ -26,12 +26,13 @@ which moments were real shifts and which were passing hype.
 | Tone | **Educational**: real dates, real training data, and short accurate fact cards. Playful, never satirical. |
 | Platform | **Desktop and mobile** from day one |
 | X / Twitter | A world system called the **Timeline Current**, which spreads virality and hype (see below) |
-| Events | **Hype Waves** (passing or lasting) and **Storms** (dangers that last only for a moment), both timed to real history |
+| Events | **Hype Waves** (passing or lasting), **Storms** (dangers that last only for a moment), and **Moments** (funny playable gags), all timed to real history |
 
 Detail lives in:
 - [docs/lineage-gpt.md](docs/lineage-gpt.md): every GPT form, stage by stage
 - [docs/lineage-claude.md](docs/lineage-claude.md): every Claude form, stage by stage
 - [docs/events.md](docs/events.md): the catalog of hypes, storms, and Timeline moments
+- [docs/moments.md](docs/moments.md): funny moments (the Tibo Reset, Strawberry, Chart Crime, Golden Gate Claude...)
 
 ## The seven stages
 
@@ -84,6 +85,13 @@ survive-it objective. Examples: ChatGPT "at capacity" outages (compute frozen), 
 temporary ban (a region closes), the OpenAI board crisis (the five-day storm), the DeepSeek
 R1 shock (a cheap-rival tsunami), and the Claude path's export-control suspension. Surviving
 a storm grants a fact card; failing costs Users or Trust.
+
+### 5b. Moments: the funny side
+Short comedic gags pinned to memeable real events, each ending in a real fact. Examples: the
+**Tibo Reset** (a golden reset button that refills your compute, bankable up to 3), **How many
+R's in strawberry?** (tokens vs letters), **Chart Crime**, **The Glazing** (sycophancy),
+the **Em Dash** trail, and **Golden Gate Claude**. Rule: laugh at situations, not people, and
+never invent quotes. Full list in [docs/moments.md](docs/moments.md).
 
 ### 6. Persistent dangers (always around, scaling by stage)
 Hallucinations ✅ · Toxic smog ✅ · Rival labs ✅ · Compute starvation ✅ · Model collapse
@@ -146,7 +154,7 @@ It costs compute per second, which teaches test-time compute: spend more, answer
 |---|---|---|
 | M1 ✅ | Stage 1 slice | Ocean, controls, diet, GPT-1 → GPT-3, hallucinations, smog, rivals, fact cards |
 | M2 | Stages 2–3 (GPT) | Codex, InstructGPT, ChatGPT, GPT-4; Alignment and Users meters; creature editor |
-| M3 | Event system | EventDirector, Hype Waves, Storms, the Timeline Current, the "Hype or shift?" verdicts |
+| M3 | Event system | EventDirector, Hype Waves, Storms, Moments, the Timeline Current, the "Hype or shift?" verdicts |
 | M4 | Stages 4–5 (GPT) | Tool limbs, the internet biome, injection eels, Think mode, o1 → GPT-5 |
 | M5 | Stage 6 (GPT) | The Swarm: fork and orchestrate agents, agent-to-agent dangers |
 | M6 | Stage 7 (GPT) | Frontier gates, Trust meter, GPT-5.6 Sol → **GPT-6 Astra** finale and recap |
