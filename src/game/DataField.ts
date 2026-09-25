@@ -24,6 +24,11 @@ export class DataField {
   readonly positions: THREE.Vector3[];
   private readonly phases: Float32Array;
   private readonly special = new Set<number>();
+  /** Hidden particles found by thinking stay visible until eaten. */
+  private readonly revealed = new Set<number>();
+  /** Where the player is thinking from, and how far thought reaches. */
+  thinkFrom: THREE.Vector3 | null = null;
+  thinkRange = 30;
   private table: { kind: ParticleKind; weight: number }[] = [];
   private readonly dummy = new THREE.Object3D();
   private readonly color = new THREE.Color();
@@ -56,6 +61,7 @@ export class DataField {
     if (hallucinationRate > 0) this.table.push({ kind: 'hallucination', weight: hallucinationRate });
     if (rewardHackRate > 0) this.table.push({ kind: 'rewardHack', weight: rewardHackRate });
     this.special.clear();
+    this.revealed.clear();
     for (let i = 0; i < this.count; i++) this.respawn(i, avoid);
     this.recolorAll();
   }
@@ -66,14 +72,17 @@ export class DataField {
 
   update(t: number): void {
     const closed = this.closed;
+    const from = this.thinking ? this.thinkFrom : null;
+    const rangeSq = this.thinkRange * this.thinkRange;
     for (let i = 0; i < this.count; i++) {
       const phase = this.phases[i];
       const kind = this.kinds[i];
+      if (from && !this.revealed.has(i) && this.isHiddenKind(kind) && this.positions[i].distanceToSquared(from) < rangeSq) this.revealed.add(i);
       this.dummy.position.copy(this.positions[i]);
       this.dummy.position.y += Math.sin(t * 0.8 + phase) * 0.4;
       this.dummy.rotation.set(t * 0.5 + phase, t * 0.3 + phase, 0);
       let scale = kind === 'hallucination' ? 1.3 : 1;
-      if (this.isHidden(kind) && !this.thinking) scale = 0;
+      if (this.isHidden(kind, i)) scale = 0;
       if (closed && this.positions[i].distanceToSquared(closed.center) < closed.radius * closed.radius) scale *= 0.35;
       if (this.skin === 'bridges') this.dummy.scale.set(scale * 2.2, scale * 0.35, scale * 0.35);
       else this.dummy.scale.setScalar(scale);
@@ -103,7 +112,7 @@ export class DataField {
     for (let i = 0; i < this.count; i++) {
       const kind = this.kinds[i];
       if (kind === 'hallucination' || kind === 'rewardHack' || !types.has(kind)) continue;
-      if (this.isHidden(kind) && !this.thinking) continue;
+      if (this.isHidden(kind, i)) continue;
       const p = this.positions[i];
       const d2 = p.distanceToSquared(center);
       if (d2 > rangeSq || d2 < 0.01) continue;
@@ -121,7 +130,7 @@ export class DataField {
       const p = this.positions[i];
       if (p.distanceToSquared(center) >= reachSq) continue;
       const kind = this.kinds[i];
-      if (this.isHidden(kind) && !opts.thinking) continue;
+      if (this.isHiddenKind(kind) && !opts.thinking && !this.revealed.has(i)) continue;
       if (closed && p.distanceToSquared(closed.center) < closed.radius * closed.radius) continue;
       eaten.push(kind);
       this.respawn(i, center);
@@ -139,7 +148,7 @@ export class DataField {
       const kind = this.kinds[i];
       if (kind === 'hallucination' || kind === 'rewardHack') continue;
       if (type ? kind !== type : false) continue;
-      if (this.isHidden(kind) && !this.thinking) continue;
+      if (this.isHidden(kind, i)) continue;
       if (exclude?.has(i)) continue;
       const d = this.positions[i].distanceToSquared(from);
       if (d < bestD) {
@@ -148,6 +157,14 @@ export class DataField {
       }
     }
     return best;
+  }
+
+  /** Indices of visible hallucinations and reward hacks within `range` (for the autopilot). */
+  dangerNear(center: THREE.Vector3, range: number): number[] {
+    const out: number[] = [];
+    const r2 = range * range;
+    for (const i of this.special) if (this.positions[i].distanceToSquared(center) < r2) out.push(i);
+    return out;
   }
 
   /** Eats one particle by index (used by forks). */
@@ -159,8 +176,18 @@ export class DataField {
     return kind;
   }
 
-  private isHidden(kind: ParticleKind): boolean {
+  private isHiddenKind(kind: ParticleKind): boolean {
     return kind !== 'hallucination' && kind !== 'rewardHack' && !!DATA_TYPES[kind].hidden;
+  }
+
+  /** Hidden right now: a hidden type you haven't found by thinking. */
+  private isHidden(kind: ParticleKind, i: number): boolean {
+    return this.isHiddenKind(kind) && !this.thinking && !this.revealed.has(i);
+  }
+
+  /** How many hidden particles have been found and not yet eaten. */
+  get revealedCount(): number {
+    return this.revealed.size;
   }
 
   private respawn(i: number, avoid: THREE.Vector3): void {
@@ -170,6 +197,7 @@ export class DataField {
 
     const kind = this.pickKind();
     this.kinds[i] = kind;
+    this.revealed.delete(i);
     if (kind === 'hallucination' || kind === 'rewardHack') this.special.add(i);
     else this.special.delete(i);
   }

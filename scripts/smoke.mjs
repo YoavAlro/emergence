@@ -172,3 +172,4 @@ if (failures.length) {
   process.exit(1);
 }
 console.log('\nSMOKE PASSED');
+process.exit(0);

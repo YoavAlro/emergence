@@ -5,12 +5,12 @@ import { chromium } from 'playwright';
 import { preview } from 'vite';
 
 const [lineage = 'gpt', steps = '4', maxMin = '40', startForm = ''] = process.argv.slice(2);
-const server = await preview({ preview: { port: 4180, strictPort: true }, logLevel: 'silent' });
+const server = await preview({ preview: { port: Number(process.env.PT_PORT || 4180), strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 480, height: 300 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
-await page.goto('http://localhost:4180/?debug');
+await page.goto(`http://localhost:${process.env.PT_PORT || 4180}/?debug`);
 await page.click(`.lineage.${lineage}`);
 await page.waitForSelector('.modal .btn.primary');
 await page.click('.modal .btn.primary');
@@ -27,7 +27,7 @@ while (Date.now() - start < Number(maxMin) * 60_000) {
     const sim = s.run.log.playSeconds / 60;
     console.log(`${new Date().toISOString().slice(11, 19)} form ${s.formIndex} ${s.formId} · sim ${sim.toFixed(1)} min · users ${Math.round(s.run.users)} · align ${Math.round(s.run.alignment)} · trust ${Math.round(s.run.trust)}`);
   }
-  if (++tick % 6 === 0) console.log(`   … ${s.formId} eaten ${s.eaten} acc ${Math.round(s.accuracy * 100)}% users ${Math.round(s.run.users)} align ${Math.round(s.run.alignment)} trust ${Math.round(s.run.trust)} const ${Math.round(s.run.constitution)} event ${s.event} pending ${s.pending.length}`);
+  if (++tick % 6 === 0) console.log(`   … ${s.formId} eaten ${s.eaten} acc ${Math.round(s.accuracy * 100)}% users ${Math.round(s.run.users)} align ${Math.round(s.run.alignment)} trust ${Math.round(s.run.trust)} const ${Math.round(s.run.constitution)} event ${s.event} pending ${s.pending.length} losses ${JSON.stringify(s.losses)}`);
   if (s.finished) break;
 }
 const s = await page.evaluate(() => window.__emergence.state());
@@ -37,3 +37,4 @@ console.log(`Total sim: ${(s.run.log.playSeconds / 60).toFixed(1)} min · finish
 if (errors.length) console.log('ERRORS', errors);
 await browser.close();
 await server.close();
+process.exit(0);

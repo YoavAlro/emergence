@@ -8,7 +8,7 @@ import { EVENTS } from '../config/events';
 import { LINEAGES } from '../config/models';
 import { RECURRING_GAGS, TIMELINE_POSTS } from '../config/timeline';
 import type { AbilityId, EventSpec, Lineage, ModelForm, Modifiers, PickupEffect, RecurringGag, SizeFormSpec } from '../config/types';
-import { ABILITY_INTRO, DANGER_TEXT, GATE_HINTS, INTERNET_BIOME } from '../config/world';
+import { ABILITY_INTRO, DANGER_TEXT, GATE_HINTS, INTERNET_BIOME, USER_MARKET } from '../config/world';
 import { clearSave, writeSave, writeSettings, type SaveData, type Settings } from '../save';
 import { showEditor } from '../ui/Editor';
 import { isAutoModals, modalOpen, setAutoModals, showChoice, showFactCard } from '../ui/FactCard';
@@ -119,11 +119,20 @@ export class Game {
   private speedNow = 0;
   /** Debug: simulation substeps per frame, and an autopilot that eats what the recipe needs. */
   private simSteps = 1;
+  /** Debug: how often each danger cost you data. */
+  private readonly losses: Record<string, number> = {};
+  private lost(cause: string): void {
+    this.losses[cause] = (this.losses[cause] ?? 0) + 1;
+  }
   private bot = false;
   /** Adaptive quality: drop the pixel ratio when frames run slow. */
   private fpsWindow = { frames: 0, time: 0 };
   private pixelRatio = 1;
   private botFrame = 0;
+  private botLastEat = 0;
+  private botLastEaten = 0;
+  private botWander: THREE.Vector3 | null = null;
+  private botWanderUntil = 0;
 
   constructor(
     private readonly root: HTMLElement,
@@ -419,6 +428,7 @@ export class Game {
     if (wantThink !== this.thinking) this.audio.think(wantThink);
     this.thinking = wantThink;
     this.field.thinking = wantThink;
+    this.field.thinkFrom = this.player.position;
     this.hunters.thinking = wantThink;
     this.player.thinking = wantThink;
     this.grabbing = this.abilities.has('tools') && inp.isHeld('grab') && this.run.compute > 2;
@@ -537,7 +547,25 @@ export class Game {
   /** Autopilot for playtime measurement: swim toward the most-needed data type. */
   private botSteer(): [number, number] {
     const pos = this.player.position;
+    // Like a player using the editor: buy whatever parts are affordable, newest first.
+    if (this.abilities.has('editor')) {
+      for (const id of RunState.availableParts(this.forms, this.progress.formIndex).reverse()) {
+        if (!this.run.ownedParts.has(id) && this.run.equip(id)) this.player.setParts(this.run.equipped, this.run.disabledParts);
+      }
+    }
     let goal: THREE.Vector3 | null = null;
+    // Stuck (nothing eaten for a while)? Wander somewhere else for a few seconds.
+    const now = this.run.log.playSeconds;
+    if (this.progress.eaten !== this.botLastEaten) {
+      this.botLastEaten = this.progress.eaten;
+      this.botLastEat = now;
+    }
+    if (now - this.botLastEat > 8 && now > this.botWanderUntil) {
+      this.botWander = new THREE.Vector3().randomDirection().multiplyScalar(WORLD_RADIUS * 0.6);
+      this.botWanderUntil = now + 3;
+      this.botLastEat = now;
+    }
+    if (now < this.botWanderUntil && this.botWander) goal = this.botWander;
     // Rollout: go build trust at a partner hub.
     if (this.rollout && this.beacons.list.length) goal = this.beacons.list[0].group.position;
     // Event pickups (hearts, privacy controls...) first.
@@ -558,8 +586,10 @@ export class Game {
       if (next) {
         const mix = this.progress.mix();
         let best = -Infinity;
+        const band = next.gate?.constitution;
         for (const [k, share] of Object.entries(next.recipe)) {
           const gap = (share ?? 0) - mix[k as DataTypeId];
+          if (k === 'constitution' && band && this.run.constitution > band[1] - 5) continue;
           if (gap > best) {
             best = gap;
             type = k as DataTypeId;
@@ -569,16 +599,27 @@ export class Game {
         if (this.progress.dietReady()) type = next.recipe.feedback ? 'feedback' : type;
       }
       needHidden = !!type && !!DATA_TYPES[type].hidden;
-      const i = this.field.nearest(pos, needHidden && !this.thinking ? null : type);
+      const i = this.field.nearest(pos, type);
       if (i >= 0) goal = this.field.positions[i];
+      // Nothing revealed nearby: think to scan for hidden data.
+      if (needHidden) this.input.hold('think', i < 0 ? this.run.compute > 20 : this.thinking && this.run.compute > 5);
+      else this.input.hold('think', false);
     }
-    this.input.hold('think', needHidden && this.run.compute > (this.thinking ? 5 : 40));
-    // Waiting for compute to think again: hold still rather than eat the wrong thing.
-    if (needHidden && !this.thinking) return [0, 0];
     if (!goal) return [0, 1];
     const dir = this.lookTarget.subVectors(goal, pos);
     const dist = dir.length();
     dir.normalize();
+    // Steer around threats like a careful player: hallucinations, rivals, hunters, smog.
+    const avoid = new THREE.Vector3();
+    const push = (from: THREE.Vector3, radius: number, weight: number) => {
+      const d = pos.distanceTo(from);
+      if (d < radius && d > 0.01) avoid.addScaledVector(new THREE.Vector3().subVectors(pos, from).normalize(), (weight * (radius - d)) / radius);
+    };
+    for (const i of this.field.dangerNear(pos, this.reach() + 4)) push(this.field.positions[i], this.reach() + 4, 1.5);
+    for (const r of this.rivals.list) if (!r.stumbling) push(r.group.position, r.size + 14, 2.5);
+    for (const h of this.hunters.list) push(h.group.position, h.size + 10, 2);
+    for (const p of this.pickups.list) if (p.bad) push(p.sprite.position, 8, 3);
+    dir.add(avoid).normalize();
     this.yaw = Math.atan2(-dir.x, -dir.z);
     this.pitch = Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1));
     return [0, Math.min(1, 0.35 + dist / 12)];
@@ -598,6 +639,7 @@ export class Game {
     for (const kind of kinds) {
       if (kind === 'hallucination') {
         this.progress.loseAny(3);
+        this.lost('hallucination');
         if (!fromFork) this.driftUntil = t + 4;
         this.hud.toast(DANGER_TEXT.hallucination, 'bad');
         this.audio.bad();
@@ -620,19 +662,21 @@ export class Game {
         this.hud.toast(DANGER_TEXT.overRefusal, 'bad');
         continue;
       }
-      const n = Math.max(1, Math.round(this.mods.dataMult[kind] ?? 1));
+      const n = Math.max(1, Math.round((this.mods.dataMult[kind] ?? 1) * (DATA_TYPES[kind].weight ?? 1)));
       this.progress.add(kind, n);
       this.director.signal('eat', n);
       this.eatTimes.push(t);
       this.audio.eat(DATA_TYPE_IDS.indexOf(kind));
       if (this.run.recordEat(kind, recipe) === 'overfit') {
         this.progress.loseType(kind, 10);
+        this.lost('overfit');
         this.hud.toast(DANGER_TEXT.overfit, 'bad', 0);
       }
       const bucket = bucketOf(kind);
       if (this.abilities.has('alignment') && bucket === 'feedback') this.run.addAlignment(0.9);
       if (bucket === 'constitution') {
-        this.run.addConstitution(2.5);
+        // Diminishing returns: each principle matters less the more you already hold.
+        this.run.addConstitution(1.5 * (1 - this.run.constitution / 100));
         if (this.abilities.has('alignment')) this.run.addAlignment(0.8);
       }
       if (this.abilities.has('trust') && (bucket === 'feedback' || bucket === 'constitution')) this.run.addTrust(0.5);
@@ -641,6 +685,8 @@ export class Game {
         let gain = rate * this.mods.userGain * (1 + this.run.hype / 100) * (this.riding ? 3 : 1);
         if (this.mods.convertToUsers.has(bucket)) gain += rate * 2;
         if (this.rollout && next?.gate?.rollout) gain *= (this.rollout.phase + 1) / next.gate.rollout.phases.length;
+        // The market saturates: growth slows as you approach everyone who might use you.
+        gain *= Math.max(0.03, 1 - this.run.users / USER_MARKET);
         this.run.addUsers(gain);
         if (this.riding) this.run.addHype(0.4 * this.mods.hypeGain);
       }
@@ -651,6 +697,7 @@ export class Game {
     }
     if (this.progress.eaten > 0 && next && this.run.checkCollapse(this.progress.mix(), this.progress.eaten, recipe)) {
       this.progress.loseFraction(0.2);
+      this.lost('collapse');
       this.hud.toast(DANGER_TEXT.collapse, 'bad', 0);
     }
     this.checkScreenshot(t);
@@ -669,7 +716,7 @@ export class Game {
       shape: 'orb',
       at: this.current.pointAt(u + 0.02),
       currentU: u + 0.02,
-      effect: { users: Math.max(500_000, (this.progress.next?.userRate ?? 100_000) * 25), hype: 10 },
+      effect: { users: Math.max(500_000, (this.progress.next?.userRate ?? 100_000) * 12), hype: 10 },
       life: 30,
     });
     this.hud.toast('Impressive streak! A screenshot of it is going viral in the Current.', 'good');
@@ -722,6 +769,7 @@ export class Game {
     if (this.run.toxicity >= 100) {
       this.run.toxicity = 0;
       this.progress.loseFraction(0.25);
+      this.lost('scandal');
       if (this.abilities.has('users')) this.run.loseUsersFraction(0.15);
       if (this.abilities.has('alignment')) this.run.addAlignment(-10);
       if (this.abilities.has('trust')) this.run.addTrust(-8);
@@ -733,7 +781,8 @@ export class Game {
     const rival = this.rivals.hitTest(this.player.position, this.player.radius);
     if (rival) {
       this.invulnerableUntil = t + 2;
-      this.progress.loseFraction(0.15);
+      this.progress.loseFraction(0.1);
+      this.lost(`rival:${rival.spec.name}`);
       this.rivals.repel(rival, this.player.position);
       this.player.velocity.subVectors(this.player.position, rival.group.position).setLength(20);
       this.director.signal('hit');
@@ -746,6 +795,7 @@ export class Game {
     this.invulnerableUntil = t + 1.5;
     this.hunters.repel(h, this.player.position);
     this.director.signal('hit');
+    this.lost(h.type);
     switch (h.type) {
       case 'jailbreaker': {
         const resisted = this.lineage === 'claude' && this.run.constitution >= 50;
@@ -824,6 +874,10 @@ export class Game {
   private updateMeters(dt: number, t: number): void {
     const m = this.mods;
     if (m.alignmentDrift) this.run.addAlignment(m.alignmentDrift * dt);
+    // Safety training never stops: Alignment slowly recovers while you stay out of toxic data.
+    if (this.abilities.has('alignment') && this.run.toxicity === 0 && this.run.alignment < 60) this.run.addAlignment(0.12 * dt);
+    // Reputation recovers slowly while nothing is going wrong.
+    if (this.abilities.has('trust') && this.run.toxicity === 0 && this.run.trust < 50 && !this.evt) this.run.addTrust(0.08 * dt);
     if (m.trustDrift && this.abilities.has('trust')) this.run.addTrust(m.trustDrift * dt);
     if (m.usersDrain) this.run.loseUsersFraction(m.usersDrain * dt);
     if (this.hangover) {
@@ -833,7 +887,7 @@ export class Game {
     if (!this.riding) this.run.addHype(-1.5 * dt);
     if (this.abilities.has('constitution')) {
       // Principles fade without practice.
-      this.run.addConstitution(-0.2 * dt);
+      this.run.addConstitution(-(0.03 + 0.004 * this.run.constitution) * dt);
       if (this.run.constitutionState() === 'overRefusing') this.run.loseUsersFraction(0.003 * dt);
     }
     // Rollout partner hubs build Trust while you stay near them.
@@ -935,6 +989,7 @@ export class Game {
               shape: s.shape ?? 'orb',
               effect: s.effect,
               eventId: spec.id,
+              bad: s.bad,
               near,
               at: inCurrent ? this.current.pointAt(u) : undefined,
               currentU: inCurrent ? u : undefined,
@@ -975,7 +1030,7 @@ export class Game {
           near,
           at: this.current.enabled ? this.current.pointAt(u) : undefined,
           currentU: this.current.enabled ? u : undefined,
-          effect: { hype: 8, users: (this.progress.next?.userRate ?? 100_000) * 6 },
+          effect: { hype: 8, users: (this.progress.next?.userRate ?? 100_000) * 3 },
           life: spec.durationSec,
         });
       }
@@ -1394,6 +1449,12 @@ export class Game {
         event: this.director.active?.spec.id ?? null,
         pending: this.director.pending.map((e) => e.id),
         forks: this.swarm.forks.length,
+        losses: { ...this.losses },
+        counts: { ...this.progress.counts },
+        pos: this.player.position.toArray().map((v) => Math.round(v * 10) / 10),
+        vel: this.player.velocity.toArray().map((v) => Math.round(v * 10) / 10),
+        yaw: this.yaw,
+        pitch: this.pitch,
         finished: this.finished,
         busy: this.busy,
         paused: this.paused,

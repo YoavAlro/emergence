@@ -54,3 +54,6 @@ export const GATE_HINTS: Record<string, string> = {
   Trust: 'Build Trust: eat Human Feedback and principles, equip the Safeguard shell, and survive storms cleanly.',
   Constitution: 'Constitution out of band: eat principles to raise it, or wait for it to fade if it is too high.',
 };
+
+/** User growth slows toward this size (ChatGPT reported about 800M weekly users in Oct 2025). */
+export const USER_MARKET = 1_000_000_000;

@@ -324,7 +324,7 @@ export const CLAUDE_EVENTS: EventSpec[] = [
     visuals: { closedRegion: true, lighting: 'grey' },
     modifiers: { trustDrift: -0.3 },
     spawns: [
-      { what: 'pickups', label: 'Drop a usage limit', color: 0xff3355, count: 6, shape: 'shield', effect: { users: 20_000_000, trust: -10 } },
+      { what: 'pickups', label: 'Drop a usage limit', color: 0xff3355, count: 6, shape: 'shield', effect: { users: 20_000_000, trust: -10 }, bad: true },
     ],
     reward: { ep: 2, trust: 8 },
     penalty: { trust: -8 },

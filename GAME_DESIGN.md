@@ -38,13 +38,13 @@ Detail lives in:
 
 | # | Stage | Spore analog | Era | New mechanic |
 |---|---|---|---|---|
-| 1 | **Token Soup** (pre-training) | Cell | 2017–2020 | Eat the real training mix to evolve ✅ *built* |
-| 2 | **Alignment** (RLHF / Constitution) | Creature | 2021–2022 | Alignment meter, creature editor, gold feedback |
-| 3 | **Viral Launch** (users) | Tribal | Nov 2022–2023 | User swarm, **Timeline Current**, first Hype Waves and Storms |
-| 4 | **Tools & Internet** | Civilization | 2023–2024 | Tool limbs; portals into the live-internet biome; prompt-injection eels |
-| 5 | **Reasoning** | Early Space | Sep 2024–2025 | **Think mode**: slow time and spend compute to see hidden truth |
-| 6 | **The Swarm** (agents) | Space: colonies | 2025–mid 2026 | **Fork sub-agents** that forage; agent teams that coordinate |
-| 7 | **Frontier** | Space: galactic core | 2026 | Capability gates vs safeguards; phased rollout; the lineage finale |
+| 1 | **Token Soup** (pre-training) | Cell | 2017–2020 | Eat the real training mix to evolve ✅ |
+| 2 | **Alignment** (RLHF / Constitution) | Creature | 2021–2022 | Alignment meter, creature editor, gold feedback ✅ |
+| 3 | **Viral Launch** (users) | Tribal | Nov 2022–2023 | User swarm, **Timeline Current**, first Hype Waves and Storms ✅ |
+| 4 | **Tools & Internet** | Civilization | 2023–2024 | Tool limbs; portals into the live-internet biome; prompt-injection eels ✅ |
+| 5 | **Reasoning** | Early Space | Sep 2024–2025 | **Think mode**: slow time and spend compute to see hidden truth ✅ |
+| 6 | **The Swarm** (agents) | Space: colonies | 2025–mid 2026 | **Fork sub-agents** that forage; agent teams that coordinate ✅ |
+| 7 | **Frontier** | Space: galactic core | 2026 | Capability gates vs safeguards; phased rollout; the lineage finale ✅ |
 
 ## Core systems
 
@@ -101,12 +101,14 @@ Reward hacking ✅ (fake feedback orbs, grey in Think mode) · Jailbreakers ✅ 
 
 ### 7. Consequences carry forward
 What you ate early can come back later. Example on the Claude path: eating "shadow-library"
-books in Stage 1 (they are cheap and plentiful) triggers the **authors' lawsuit** storm in
-Stage 6. It is based on the real 2025 case in which training on purchased books was ruled fair use
+books in Stage 1 (they are cheap and plentiful) triggers the **authors' settlement** storm in
+Stage 5. On the GPT path, eating paywalled news doubles the lawyer sharks in the NYT lawsuit storm. It is based on the real 2025 case in which training on purchased books was ruled fair use
 and pirated copies were not, which ended in a ~$1.5B settlement.
 
 ### 8. Think mode (Stage 5+)
-Hold THINK to slow time. While thinking, hallucinations turn grey and hidden paths appear.
+Hold THINK to slow time. While thinking, hallucinations and fake feedback turn grey, camouflaged
+injection eels light up, and hidden reasoning traces within range are revealed (they stay revealed
+until eaten).
 It costs compute per second, which teaches test-time compute: spend more, answer better.
 
 ### 9. The Swarm (Stage 6+)
@@ -123,8 +125,8 @@ It costs compute per second, which teaches test-time compute: spend more, answer
 - The final evolution requires crossing a **capability threshold** *and* holding enough **Trust** and **Alignment**.
 - Crossing it too fast triggers restrictions: a phased rollout where only part of the world can reach you.
 - GPT finale: **GPT-6 Astra**, the first OpenAI model rated *Critical* for cybersecurity,
-  released in phases (🔎).
-- Claude finale: **Claude Opus 5.5** (🔎). Along the way you pass the restricted Mythos
+  released in phases (verified Sep 2026).
+- Claude finale: **Claude Opus 5.5** (verified Sep 2026). Along the way you pass the restricted Mythos
   models and Project Glasswing, where access is limited to defenders.
 - Ending card: a timeline recap of your run (your diet, the hypes you bet on, the storms you survived)
   laid over the real history.
@@ -161,10 +163,18 @@ It costs compute per second, which teaches test-time compute: spend more, answer
 | # | Milestone | Contents |
 |---|---|---|
 | M1 ✅ | Stage 1 slice | Ocean, controls, diet, GPT-1 → GPT-3, hallucinations, smog, rivals, fact cards |
-| M2 | Stages 2–3 (GPT) | Codex, InstructGPT, ChatGPT, GPT-4; Alignment and Users meters; creature editor |
-| M3 | Event system | EventDirector, Hype Waves, Storms, Moments, the Timeline Current, the "Hype or shift?" verdicts |
-| M4 | Stages 4–5 (GPT) | Tool limbs, the internet biome, injection eels, Think mode, o1 → GPT-5 |
-| M5 | Stage 6 (GPT) | The Swarm: fork and orchestrate agents, agent-to-agent dangers |
-| M6 | Stage 7 (GPT) | Frontier gates, Trust meter, GPT-5.6 Sol → **GPT-6 Astra** finale and recap |
-| M7 | Claude lineage | `CLAUDE_FORMS` 1–7, Constitution food and meter, Claude-only storms → **Opus 5.5** |
-| M8 | Polish | Audio, accessibility, a performance pass, a fact-verification pass over every 🔎 |
+| M2 ✅ | Stages 2–3 (GPT) | Codex, InstructGPT, ChatGPT, GPT-4; Alignment and Users meters; creature editor |
+| M3 ✅ | Event system | EventDirector, Hype Waves, Storms, Moments, the Timeline Current, the "Hype or shift?" verdicts |
+| M4 ✅ | Stages 4–5 (GPT) | Tool limbs, the internet biome, injection eels, Think mode, o1 → GPT-5 |
+| M5 ✅ | Stage 6 (GPT) | The Swarm: fork and orchestrate agents, agent-to-agent dangers |
+| M6 ✅ | Stage 7 (GPT) | Frontier gates, Trust meter, GPT-5.6 → **GPT-6 Astra** finale and recap |
+| M7 ✅ | Claude lineage | `CLAUDE_FORMS` 1–7, Constitution food and meter, Claude-only storms → **Opus 5.5** |
+| M8 ✅ | Polish | Audio, accessibility, a performance pass, a fact-verification pass over every 🔎 |
+
+Notes on the build (Sep 2026):
+- M2–M6 landed together: the shared, data-driven engine (meters, events, mechanics) was built once
+  and the GPT content for Stages 2–7 on top of it.
+- Playtime is measured with `scripts/playtime.mjs`, an autopilot that plays with the real mechanics.
+- M8: WebAudio synth (no audio files), reduced motion, larger text, focus-trapped dialogs, live
+  regions for toasts, full keyboard and touch parity, adaptive resolution, lower particle counts on
+  touch devices, and two fact-check passes (every recent fact checked against primary sources).

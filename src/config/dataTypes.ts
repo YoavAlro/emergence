@@ -25,8 +25,10 @@ export interface DataType {
   countsAs?: DataTypeId;
   /** Flag set when eaten. Events can require it (see `EventSpec.requiresFlag`). */
   flag?: string;
-  /** Only visible and edible while Think mode is on. */
+  /** Hidden until you find it with Think mode. */
   hidden?: boolean;
+  /** Each piece counts this many times toward your diet (long items are worth more). */
+  weight?: number;
 }
 
 export const DATA_TYPES: Record<DataTypeId, DataType> = {
@@ -82,8 +84,9 @@ export const DATA_TYPES: Record<DataTypeId, DataType> = {
     id: 'reasoning',
     label: 'Reasoning traces',
     color: 0xb07bff,
-    blurb: 'Reasoning traces: step-by-step working, rewarded when the final answer checks out. Only visible while you think.',
+    blurb: 'Reasoning traces: step-by-step working, rewarded when the final answer checks out. Hidden until you THINK; each one is long, so it counts double.',
     hidden: true,
+    weight: 2,
   },
   synthetic: {
     id: 'synthetic',

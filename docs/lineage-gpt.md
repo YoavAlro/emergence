@@ -30,7 +30,7 @@ Forms are in release order. Recipes from Stage 2 on are approximations of what e
 | 6 | GPT-5.4 | Mar 5, 2026 | Native computer use; ~1M context in the API | | ✅² |
 | 6 | GPT-5.5 | Apr 23, 2026 | Thinking / Pro; API next day | | ✅² |
 | 7 | GPT-5.6 (Sol / Terra / Luna) | Jul 9, 2026 (GA) | → *size forms, Trust meter, Agent Teams* | Limited to ~20 trusted partners from Jun 26 at the US government's request | ✅² |
-| 7 | **GPT-6 Astra** (finale) | Sep 3, 2026 | Gate: Alignment 70 + Trust 60, then a phased rollout (Trust 70 → 85) | OpenAI's first model at the Critical cybersecurity level under its Preparedness Framework; cyber-program partners first | ✅² |
+| 7 | **GPT-6 Astra** (finale) | Sep 3, 2026 | Gate: Alignment 60 + Trust 60, then a phased rollout (Trust 70 → 85) | OpenAI's first model at the Critical cybersecurity level under its Preparedness Framework; cyber-program partners first | ✅² |
 
 Order note: GPT-5 sits in Stage 6 because the first agents (Operator, Jan 2025) shipped before it.
 

@@ -199,7 +199,7 @@ export type Objective =
   | { kind: 'minigame' };
 
 export type SpawnSpec =
-  | { what: 'pickups'; label: string; color: number; count: number; shape?: 'orb' | 'heart' | 'button' | 'shield' | 'creature'; effect?: PickupEffect; inCurrent?: boolean }
+  | { what: 'pickups'; label: string; color: number; count: number; shape?: 'orb' | 'heart' | 'button' | 'shield' | 'creature'; effect?: PickupEffect; inCurrent?: boolean; /** Grabbing it counts against avoid objectives. */ bad?: boolean }
   | { what: 'hunters'; kind: HunterKind; count: number }
   | { what: 'beacons'; label: string; color: number; count: number }
   | { what: 'rivalClones'; name: string; count: number }

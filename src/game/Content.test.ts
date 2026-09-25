@@ -58,6 +58,9 @@ describe('content integrity', () => {
             if (DATA_TYPES[type].hidden) expect(abilities.has('think'), `${f.id} needs hidden ${type} before Think mode`).toBe(true);
           }
           expect(f.target, `${f.id} target`).toBeGreaterThan(0);
+          // Decoys stay a minority, so a careful player can reach a 65% match.
+          const share = Object.entries(f.spawn).filter(([k]) => f.recipe[bucketOf(k as DataTypeId)] !== undefined).reduce((a, [, v]) => a + (v ?? 0), 0);
+          expect(share, `${f.id} spawn is mostly decoys`).toBeGreaterThanOrEqual(0.69);
         }
       });
 
@@ -147,6 +150,7 @@ describe('content integrity', () => {
       if (e.kind === 'hype') expect(e.hype, `${e.id} hype spec`).toBeTruthy();
       if (e.objective?.kind === 'minigame') expect(e.minigame, `${e.id} minigame`).toBeTruthy();
       if (e.disablesPart) expect(PARTS[e.disablesPart]).toBeTruthy();
+      if (e.objective?.kind === 'avoidPickups') expect(e.spawns?.some((s) => s.what === 'pickups' && s.bad), `${e.id} has nothing bad to avoid`).toBe(true);
       for (const s of e.spawns ?? []) if (s.what === 'pickups' && e.objective?.kind === 'collect') expect(s.count).toBeGreaterThanOrEqual(e.objective.count);
     }
     for (const g of RECURRING_GAGS) checkCard(g.fact, g.id);

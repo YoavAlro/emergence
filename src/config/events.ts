@@ -120,7 +120,7 @@ export const HYPES_AND_STORMS: EventSpec[] = [
     at: { gpt: 'plugins', claude: 'claude-1' },
     delaySec: 90,
     durationSec: 40,
-    title: 'autonomous agents',
+    title: 'Autonomous agents',
     banner: 'AutoGPT and BabyAGI loop GPT-4 on its own goals. Everyone says agents are here.',
     hype: {
       upgradeName: 'Free auto-forks',
@@ -240,7 +240,7 @@ export const HYPES_AND_STORMS: EventSpec[] = [
     at: { gpt: 'gpt-4-turbo' },
     delaySec: 190,
     durationSec: 35,
-    title: 'the GPT Store',
+    title: 'The GPT Store',
     banner: 'Custom GPTs are the new apps. Everyone is building one this weekend.',
     hype: {
       upgradeName: 'Store magnet',
@@ -301,7 +301,7 @@ export const HYPES_AND_STORMS: EventSpec[] = [
     at: { gpt: 'gpt-4-turbo', claude: 'claude-3' },
     delaySec: 280,
     durationSec: 30,
-    title: 'the "first AI software engineer"',
+    title: 'The "first AI software engineer"',
     banner: 'A startup demos an AI that does whole engineering tasks. Code orbs glow.',
     hype: {
       upgradeName: 'Code frenzy',
@@ -386,7 +386,7 @@ export const HYPES_AND_STORMS: EventSpec[] = [
     at: { gpt: 'o1', claude: 'claude-3.5-sonnet' },
     delaySec: 20,
     durationSec: 40,
-    title: 'reasoning models',
+    title: 'Reasoning models',
     banner: 'Models that think before they answer. Is this the next scaling law?',
     hype: {
       upgradeName: 'Deep thinking',
@@ -418,7 +418,7 @@ export const HYPES_AND_STORMS: EventSpec[] = [
     at: { gpt: 'o1', claude: 'computer-use' },
     delaySec: 150,
     durationSec: 40,
-    title: 'the Model Context Protocol',
+    title: 'The Model Context Protocol',
     banner: 'An open standard for plugging models into tools and data. A universal tool socket?',
     hype: {
       upgradeName: 'Universal tool socket',
@@ -479,7 +479,7 @@ export const HYPES_AND_STORMS: EventSpec[] = [
     at: { gpt: 'operator', claude: 'computer-use' },
     delaySec: 20,
     durationSec: 40,
-    title: 'vibe coding',
+    title: 'Vibe coding',
     banner: 'Describe what you want, accept every change, and never read the code.',
     hype: {
       upgradeName: 'Vibe coding',
@@ -565,7 +565,7 @@ export const HYPES_AND_STORMS: EventSpec[] = [
     at: { gpt: 'gpt-5.2', claude: 'opus-4.5' },
     delaySec: 25,
     durationSec: 40,
-    title: 'a social network for AI agents',
+    title: 'A social network for AI agents',
     banner: 'Agents get their own social network. Your forks want to post instead of work.',
     hype: {
       upgradeName: 'Agent influencers',
@@ -624,7 +624,7 @@ export const HYPES_AND_STORMS: EventSpec[] = [
     at: { gpt: 'gpt-5.4', claude: 'opus-4.5' },
     delaySec: 20,
     durationSec: 40,
-    title: 'agent teams',
+    title: 'Agent teams',
     banner: 'Many agents on one task, coordinating with each other instead of reporting only to you.',
     hype: {
       upgradeName: 'Agent teams',

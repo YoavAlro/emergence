@@ -226,7 +226,7 @@ export class Hud {
   update(s: HudState): void {
     const eraStage = s.form.stage;
     this.stage.textContent = STAGE_NAMES[eraStage];
-    this.model.replaceChildren(el('strong', undefined, s.form.name), el('span', undefined, ` · ${s.form.paramsLabel}${s.sizeFormName ? ` · ${s.sizeFormName}` : ''}`));
+    this.model.replaceChildren(el('strong', undefined, s.form.name), el('span', undefined, ` · ${s.sizeFormName ? `${s.sizeFormName} form` : s.form.paramsLabel}`));
     this.model.style.color = hex(s.form.color);
 
     if (!s.next) {
