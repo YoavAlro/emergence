@@ -182,7 +182,7 @@ export interface ModelForm {
   finale?: boolean;
 }
 
-export type EventKind = 'hype' | 'storm' | 'moment';
+export type EventKind = 'hype' | 'storm' | 'moment' | 'boss';
 
 export type Objective =
   | { kind: 'survive' }
@@ -195,6 +195,7 @@ export type Objective =
   | { kind: 'keepAbove'; meter: 'alignment' | 'trust'; value: number }
   | { kind: 'eat'; count: number; endsEarly?: boolean }
   | { kind: 'noRogues' }
+  | { kind: 'defeat' }
   | { kind: 'avoidPickups'; max: number }
   | { kind: 'minigame' };
 
@@ -202,7 +203,7 @@ export type SpawnSpec =
   | { what: 'pickups'; label: string; color: number; count: number; shape?: 'orb' | 'heart' | 'button' | 'shield' | 'creature'; effect?: PickupEffect; inCurrent?: boolean; /** Grabbing it counts against avoid objectives. */ bad?: boolean }
   | { what: 'hunters'; kind: HunterKind; count: number }
   | { what: 'beacons'; label: string; color: number; count: number }
-  | { what: 'rivalClones'; name: string; count: number }
+  | { what: 'rivalClones'; name: string; count: number; org?: string }
   | { what: 'rogueForks'; fraction: number }
   | { what: 'ghost'; label: string; color: number };
 
@@ -231,6 +232,21 @@ export type MiniGameSpec =
 export interface ShopCustomer {
   ask: string;
   options: { label: string; cash: number; note: string }[];
+}
+
+/** A rival-lab boss fight. Taunts are lines for the cartoon rival, never quotes from real people. */
+export interface BossSpec {
+  name: string;
+  /** Matches a lab in `labs.ts`, for its color and emblem. */
+  org: string;
+  hp: number;
+  /** How it attacks between dizzy spells. */
+  pattern: 'charge' | 'spray' | 'summon' | 'orbit';
+  /** Relative to the player. */
+  size: number;
+  taunts: string[];
+  /** Shown when it's beaten. */
+  defeatLine: string;
 }
 
 export interface HypeSpec {
@@ -291,6 +307,7 @@ export interface EventSpec {
   lingering?: { id: string; modifiers: Modifiers; label: string; trail?: string };
   minigame?: MiniGameSpec;
   hype?: HypeSpec;
+  boss?: BossSpec;
   reward?: { ep?: number; users?: number; trust?: number; alignment?: number };
   penalty?: { usersFraction?: number; trust?: number; alignment?: number; ep?: number };
   /** Anonymous, paraphrased posts that flow through the Timeline Current during the event. */

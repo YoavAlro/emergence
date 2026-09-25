@@ -97,6 +97,21 @@ describe('EventDirector', () => {
     expect(result).toBe(true);
   });
 
+  it('ends a boss fight as soon as the boss is defeated, and fails it on timeout', () => {
+    const d = new EventDirector([ev('boss', { kind: 'boss', delaySec: 0, objective: { kind: 'defeat' } })]);
+    d.enterEra('gpt', 'chatgpt', new Set());
+    let endedAt = -1;
+    const result = runToEnd(d, ctx(), (dir, t) => {
+      if (t === 10) dir.signal('defeated');
+      endedAt = t;
+    });
+    expect(result).toBe(true);
+    expect(endedAt).toBeLessThan(20);
+    const d2 = new EventDirector([ev('boss2', { kind: 'boss', delaySec: 0, objective: { kind: 'defeat' } })]);
+    d2.enterEra('gpt', 'chatgpt', new Set());
+    expect(runToEnd(d2, ctx())).toBe(false);
+  });
+
   it('fails avoid-hits objectives after too many hits', () => {
     const d = new EventDirector([ev('sharks', { delaySec: 0, objective: { kind: 'avoidHits', max: 1 } })]);
     d.enterEra('gpt', 'chatgpt', new Set());

@@ -3,6 +3,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { SKINS, type AchievementSpec, type StatKey } from '../config/achievements';
 import { DATA_TYPES, DATA_TYPE_IDS, bucketOf, type DataTypeId } from '../config/dataTypes';
 import { EVENTS } from '../config/events';
 import { LINEAGES } from '../config/models';
@@ -12,15 +13,20 @@ import { ABILITY_INTRO, DANGER_TEXT, GATE_HINTS, INTERNET_BIOME, USER_MARKET } f
 import { clearSave, writeSave, writeSettings, type SaveData, type Settings } from '../save';
 import { showEditor } from '../ui/Editor';
 import { isAutoModals, modalOpen, setAutoModals, showChoice, showFactCard } from '../ui/FactCard';
-import { Hud, type HudEvent } from '../ui/Hud';
+import { Hud, KIND_LABEL, type HudEvent } from '../ui/Hud';
 import { showMenu } from '../ui/Menu';
 import { playMiniGame } from '../ui/MiniGames';
 import { showRecap } from '../ui/RecapScreen';
+import { showTrophies } from '../ui/Trophies';
 import { Audio } from './Audio';
+import { Boss } from './Boss';
+import { boilEmblems } from './critter';
 import { DataField, type ParticleKind } from './DataField';
 import { EventDirector, GagTimer, type ActiveEvent } from './EventDirector';
 import { Hunters } from './Hunters';
 import { Input, type Action } from './Input';
+import { Juice } from './Juice';
+import { Meta } from './Meta';
 import { Ocean, type OceanMood } from './Ocean';
 import { Beacons, Pickups, type Pickup } from './Pickups';
 import { Player } from './Player';
@@ -28,6 +34,7 @@ import { Portals } from './Portals';
 import { Progress } from './Progress';
 import { buildRecap } from './Recap';
 import { Rivals } from './Rivals';
+import { Score } from './Score';
 import { RunState, combineModifiers, gateChecks, rolloutPhase, formatUsers, type Combined } from './RunState';
 import { Smog } from './Smog';
 import { Swarm } from './Swarm';
@@ -83,6 +90,16 @@ export class Game {
   private readonly forms: ModelForm[];
   private readonly progress: Progress;
   private readonly director = new EventDirector(EVENTS);
+  private readonly juice: Juice;
+  private readonly meta = Meta.load();
+  /** This lineage's high score before this run (the HUD's "Best"). */
+  private startBest = 0;
+  private readonly score = new Score();
+  private boss: { fight: Boss; eventId: string; tauntTimer: number } | null = null;
+  private boosting = false;
+  private readonly eatWhere: THREE.Vector3[] = [];
+  /** Seconds of thinking / riding not yet added to lifetime stats. */
+  private statSeconds = { think: 0, current: 0 };
   private run: RunState;
   private gag: { timer: GagTimer; spec: RecurringGag } | null = null;
 
@@ -144,12 +161,14 @@ export class Game {
     this.renderer = new THREE.WebGLRenderer({ antialias: !this.lowQuality, powerPreference: 'high-performance' });
     this.pixelRatio = Math.min(window.devicePixelRatio, this.lowQuality ? 1.25 : 2);
     this.renderer.setPixelRatio(this.pixelRatio);
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    // Neutral tone mapping keeps cartoon colors saturated (ACES washes them out).
+    this.renderer.toneMapping = THREE.NeutralToneMapping;
     root.append(this.renderer.domElement);
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), settings.reducedMotion ? 0.7 : 1.1, 0.55, 0.12);
+    // Just a hint of glow on the brightest bits: the look is ink and paint, not neon.
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.25, 0.4, 0.9);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
 
@@ -160,9 +179,10 @@ export class Game {
     this.forms = LINEAGES[save.lineage].forms;
     this.input = new Input(this.renderer.domElement, overlay);
     this.ocean = new Ocean(this.scene, WORLD_RADIUS, this.lowQuality ? 1200 : 3000);
-    this.field = new DataField(this.lowQuality ? 1000 : 1800, WORLD_RADIUS);
+    this.field = new DataField(this.lowQuality ? 1000 : 1800, WORLD_RADIUS, (this.scene.fog as THREE.FogExp2).color);
     this.scene.add(this.field.mesh);
     this.player = new Player(this.scene);
+    this.juice = new Juice(this.scene, overlay, this.camera);
     this.rivals = new Rivals(this.scene, WORLD_RADIUS);
     this.smog = new Smog(this.scene, WORLD_RADIUS);
     this.current = new TimelineCurrent(this.scene, WORLD_RADIUS, this.lowQuality ? 90 : 180);
@@ -175,6 +195,8 @@ export class Game {
     this.progress = new Progress(this.forms, Math.min(save.formIndex, this.forms.length - 1));
     this.run = save.run ? RunState.fromJSON(save.run) : new RunState(save.lineage);
     for (const id of save.done ?? []) this.director.done.add(id);
+    this.score.total = save.score ?? 0;
+    this.startBest = this.meta.data.highScores[save.lineage] ?? 0;
     this.hud = new Hud(overlay, this.isTouch, (action, down) => this.onButton(action, down));
     this.applySettings();
 
@@ -204,6 +226,7 @@ export class Game {
   private setupEra(instant = false): void {
     const { current, next, formIndex } = this.progress;
     this.player.setForm(current, formIndex, instant);
+    this.player.setSkin(this.meta.skin.id === 'classic' ? null : this.meta.skin, current.color);
     const before = new Set(this.abilities);
     this.refreshAbilities();
     if (!instant) for (const a of this.abilities) if (!before.has(a) && ABILITY_INTRO[a]) this.hud.toast(this.keyText(ABILITY_INTRO[a]), 'good', 0);
@@ -295,12 +318,15 @@ export class Game {
     this.ocean.mood = this.moodFor();
     this.ocean.update(dt, t);
     this.field.update(t);
-    this.player.update(this.paused || modalOpen() ? 0 : dt, t);
+    this.player.update(this.paused || modalOpen() ? 0 : dt, t, this.settings.reducedMotion);
+    this.juice.update(dt);
+    boilEmblems(t, this.settings.reducedMotion);
     this.smog.update(dt * worldScale, t);
     this.current.update(dt * worldScale, t);
     this.beacons.update(t);
     this.portals.update(dt, t);
     this.placeCamera(t);
+    this.juice.applyShake(this.camera, t);
     // Bot mode (playtime measurement) renders rarely so the simulation runs fast.
     if (!this.bot || (this.botFrame++ & 15) === 0) this.composer.render();
 
@@ -360,6 +386,7 @@ export class Game {
     this.rivals.update(dt * worldScale, t, this.player.position);
     this.hunters.update(dt * worldScale, t, this.player.position, 1);
     this.pickups.update(dt * worldScale, t, this.player.position, (p, pdt) => this.ridePickup(p, pdt));
+    this.updateBoss(dt * worldScale, t);
 
     const reach = this.reach();
     // Magnets pull the types your target recipe wants (a part never lures you into decoys).
@@ -376,6 +403,46 @@ export class Game {
     this.updateGag(dt);
     this.updatePortals(t);
     this.checkEvolve();
+    if (this.thinking) this.statSeconds.think += dt;
+    if (this.riding) this.statSeconds.current += dt;
+    if (this.statSeconds.think + this.statSeconds.current >= 1) {
+      this.bump('thinkSeconds', this.statSeconds.think);
+      this.bump('currentSeconds', this.statSeconds.current);
+      this.statSeconds = { think: 0, current: 0 };
+    }
+  }
+
+  // ---- score & achievements ---------------------------------------------------
+
+  /** Adds to a lifetime stat and celebrates any achievement it unlocks. */
+  private bump(key: StatKey, n = 1): void {
+    const fresh = this.meta.bump(key, n);
+    if (fresh.length) this.celebrate(fresh);
+  }
+
+  private celebrate(list: AchievementSpec[]): void {
+    for (const a of list) {
+      this.hud.trophy(a.name, a.desc);
+      const skin = SKINS.find((k) => k.unlock === a.id);
+      if (skin) this.hud.toast(`New skin unlocked: ${skin.name}! Pick it from the title screen or pause menu.`, 'good', 0);
+    }
+    this.audio.fanfare();
+    this.meta.save();
+  }
+
+  /** A bonus with a big callout. */
+  private bonusPoints(points: number, label: string): void {
+    const p = this.score.bonus(points);
+    if (p > 0) this.juice.callout(`+${p.toLocaleString('en-US')} ${label}`, 'bonus');
+  }
+
+  /** Something bad happened to you: shake, flash, and the combo breaks. */
+  private ouch(strength = 0.5): void {
+    const lost = this.score.break();
+    this.juice.shake(strength);
+    this.juice.flash('hit');
+    this.player.ouch();
+    if (lost >= 10) this.juice.popup(this.player.position, `Combo ×${lost} lost!`, 'bad');
   }
 
   private reach(): number {
@@ -407,8 +474,9 @@ export class Game {
     }
     if (inp.consumeTap('reset')) {
       if (this.run.useReset()) {
-        this.hud.toast('Reset! Compute fully refilled.', 'good', 0);
+        this.hud.toast('Reset! Compute fully refilled. Have you tried turning it off and on again?', 'good', 0);
         this.audio.good();
+        this.bump('resetsUsed');
       }
     }
     if (inp.consumeTap('bet')) this.placeBet();
@@ -440,10 +508,11 @@ export class Game {
   private forkAgent(): void {
     const max = maxForks(this.mods.forkSlots, this.abilities.has('teams'));
     const cost = FORK_COST * this.costMult();
-    if (this.swarm.forks.length >= max) return this.hud.toast(`All ${max} fork slots are busy. RECALL to free them.`, 'info');
-    if (this.run.compute < cost) return this.hud.toast('Not enough compute to fork.', 'bad');
+    if (this.swarm.forks.length >= max) return this.hud.toast(`All ${max} fork slots are busy. Even sub-agents need a manager. RECALL to free them.`, 'info');
+    if (this.run.compute < cost) return this.hud.toast('Not enough compute to fork. The cloud bill says no.', 'bad');
     this.run.compute -= cost;
     this.swarm.fork(this.player.position);
+    this.bump('forks');
     this.hud.toast(`Forked a sub-agent (${this.swarm.forks.length}/${max}). Target: ${this.targetName()}.`, 'info', 0);
   }
 
@@ -464,9 +533,11 @@ export class Game {
     if (this.evt?.active.spec.locksEditor) return this.hud.toast(`The editor is locked during ${this.evt.active.spec.title}.`, 'bad');
     if (isAutoModals()) return;
     this.paused = true;
+    const owned = this.run.ownedParts.size;
     await showEditor(this.root, this.run, RunState.availableParts(this.forms, this.progress.formIndex), this.progress.current.color, () =>
       this.player.setParts(this.run.equipped, this.run.disabledParts),
     );
+    if (this.run.ownedParts.size > owned) this.bump('partsBought', this.run.ownedParts.size - owned);
     this.save();
     this.paused = false;
   }
@@ -474,10 +545,17 @@ export class Game {
   private async openMenu(): Promise<void> {
     if (this.busy) return;
     this.paused = true;
-    const result = await showMenu(this.root, this.settings, (s) => {
+    let result = await showMenu(this.root, this.settings, (s) => {
       writeSettings(s);
       this.applySettings();
-    });
+    }, this.meta);
+    while (result === 'trophies') {
+      await showTrophies(this.root, this.meta, () => this.player.setSkin(this.meta.skin.id === 'classic' ? null : this.meta.skin, this.progress.current.color));
+      result = await showMenu(this.root, this.settings, (s) => {
+        writeSettings(s);
+        this.applySettings();
+      }, this.meta);
+    }
     if (result === 'quit') {
       this.save();
       location.reload();
@@ -490,7 +568,8 @@ export class Game {
     this.audio.setEnabled(this.settings.audio);
     document.documentElement.classList.toggle('large-text', this.settings.largeText);
     document.documentElement.classList.toggle('reduced-motion', this.settings.reducedMotion);
-    this.bloom.strength = this.settings.reducedMotion ? 0.7 : 1.1;
+    this.bloom.strength = this.settings.reducedMotion ? 0.15 : 0.25;
+    this.juice.reducedMotion = this.settings.reducedMotion;
   }
 
   // ---- movement -------------------------------------------------------------
@@ -512,6 +591,7 @@ export class Game {
 
     const moving = x !== 0 || y !== 0;
     const boosting = this.input.isHeld('boost') && this.run.compute > 1 && moving;
+    this.boosting = boosting;
     let computeUse = 0;
     if (boosting) computeUse += BOOST_COST;
     if (this.thinking) computeUse += THINK_COST * this.mods.thinkCost;
@@ -568,8 +648,12 @@ export class Game {
       this.botLastEat = now;
     }
     if (now < this.botWanderUntil && this.botWander) goal = this.botWander;
+    // Boss fight: bonk it while it's dizzy (boosting), otherwise keep away and keep eating.
+    const fight = this.boss?.fight;
+    if (fight?.dizzy) goal = fight.group.position;
+    this.input.hold('boost', !!fight?.dizzy && this.run.compute > 10);
     // Rollout: go build trust at a partner hub.
-    if (this.rollout && this.beacons.list.length) goal = this.beacons.list[0].group.position;
+    if (!fight?.dizzy && this.rollout && this.beacons.list.length) goal = this.beacons.list[0].group.position;
     // Event pickups (hearts, privacy controls...) first.
     const evId = this.director.active?.spec.id;
     if (!goal && evId) {
@@ -621,6 +705,7 @@ export class Game {
     for (const r of this.rivals.list) if (!r.stumbling) push(r.group.position, r.size + 14, 2.5);
     for (const h of this.hunters.list) push(h.group.position, h.size + 10, 2);
     for (const p of this.pickups.list) if (p.bad) push(p.sprite.position, 8, 3);
+    if (fight && !fight.dizzy) push(fight.group.position, fight.size + 16, 4);
     dir.add(avoid).normalize();
     this.yaw = Math.atan2(-dir.x, -dir.z);
     this.pitch = Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1));
@@ -630,16 +715,26 @@ export class Game {
   // ---- eating -----------------------------------------------------------------
 
   private eat(t: number): void {
-    const eaten = this.field.collect(this.player.position, this.reach(), { thinking: this.thinking, closed: this.field.closed });
-    this.processEaten(eaten, t, false);
+    this.eatWhere.length = 0;
+    const eaten = this.field.collect(this.player.position, this.reach(), { thinking: this.thinking, closed: this.field.closed }, this.eatWhere);
+    if (eaten.length) this.player.eat();
+    this.processEaten(eaten, t, false, this.eatWhere);
   }
 
-  private processEaten(kinds: ParticleKind[], t: number, fromFork: boolean): void {
+  private processEaten(kinds: ParticleKind[], t: number, fromFork: boolean, where?: THREE.Vector3[]): void {
     if (!kinds.length) return;
     const next = this.progress.next;
     const recipe = next?.recipe ?? {};
-    for (const kind of kinds) {
+    let good = 0;
+    for (let i = 0; i < kinds.length; i++) {
+      const kind = kinds[i];
+      const at = where?.[i];
       if (kind === 'hallucination') {
+        this.bump('hallucinations');
+        if (!fromFork) {
+          this.ouch(0.35);
+          if (at) this.juice.popup(at, 'Confidently wrong!', 'bad');
+        }
         // Proportional loss: a false fact hurts everything a little, without skewing the mix.
         this.progress.loseFraction(0.03);
         this.lost('hallucination');
@@ -650,6 +745,7 @@ export class Game {
       }
       if (kind === 'rewardHack') {
         this.run.addAlignment(-3);
+        if (!fromFork) this.ouch(0.25);
         this.hud.toast(DANGER_TEXT.rewardHack, 'bad');
         this.audio.bad();
         continue;
@@ -663,6 +759,8 @@ export class Game {
       ) {
         this.run.loseUsersFraction(0.005);
         this.hud.toast(DANGER_TEXT.overRefusal, 'bad');
+        this.bump('overRefusals');
+        if (at) this.juice.popup(at, 'I can\'t eat that.', 'bad');
         continue;
       }
       // A type's weight shapes the diet; part and upgrade bonuses only speed up training.
@@ -670,6 +768,17 @@ export class Game {
       const bonus = Math.round(n * ((this.mods.dataMult[kind] ?? 1) - 1));
       this.progress.add(kind, n);
       if (bonus > 0) this.progress.addBonus(bonus);
+      good++;
+      const onDiet = (recipe[kind] ?? recipe[bucketOf(kind)] ?? 0) > 0;
+      const r = this.score.eat(t, onDiet);
+      if (at) {
+        this.juice.popup(at, r.multiplier > 1 ? `+${r.points} ×${r.multiplier}` : `+${r.points}`, onDiet ? '' : 'meh');
+        this.juice.burst(at, DATA_TYPES[kind].color, 4, 4);
+      }
+      if (r.callout) {
+        this.juice.callout(r.callout, 'combo');
+        this.audio.combo(Math.floor(r.combo / 10));
+      }
       this.director.signal('eat', n);
       this.eatTimes.push(t);
       this.audio.eat(DATA_TYPE_IDS.indexOf(kind));
@@ -700,6 +809,10 @@ export class Game {
         this.seenTypes.add(kind);
         this.hud.toast(DATA_TYPES[kind].blurb, 'info', 0);
       }
+    }
+    if (good) {
+      this.bump('eaten', good);
+      this.bump('maxCombo', this.score.combo);
     }
     if (this.progress.eaten > 0 && next && this.run.checkCollapse(this.progress.mix(), this.progress.eaten, recipe)) {
       this.progress.loseFraction(0.2);
@@ -760,7 +873,7 @@ export class Game {
     if (e.cures) {
       this.run.lingering = this.run.lingering.filter((l) => l.id !== e.cures);
       this.player.trailMark = this.run.lingering.find((l) => l.trail)?.trail ?? null;
-      this.hud.toast('Cured! The habit is gone.', 'good', 0);
+      this.hud.toast('Cured! The habit is gone. For now.', 'good', 0);
     }
   }
 
@@ -781,6 +894,8 @@ export class Game {
       if (this.abilities.has('trust')) this.run.addTrust(-8);
       this.hud.toast(DANGER_TEXT.scandal, 'bad', 0);
       this.audio.bad();
+      this.ouch(0.8);
+      this.bump('scandals');
     }
 
     if (t < this.invulnerableUntil) return;
@@ -794,6 +909,7 @@ export class Game {
       this.director.signal('hit');
       this.hud.toast(`Outcompeted! ${rival.spec.blurb}`, 'bad', 0);
       this.audio.bad();
+      this.ouch(0.6);
       return;
     }
     const h = this.hunters.hitTest(this.player.position, this.player.radius);
@@ -802,6 +918,8 @@ export class Game {
     this.hunters.repel(h, this.player.position);
     this.director.signal('hit');
     this.lost(h.type);
+    const blocked = (h.type === 'jailbreaker' && this.lineage === 'claude' && this.run.constitution >= 50) || (h.type === 'eel' && this.mods.injectionShield);
+    if (!blocked) this.ouch(0.45);
     switch (h.type) {
       case 'jailbreaker': {
         const resisted = this.lineage === 'claude' && this.run.constitution >= 50;
@@ -833,9 +951,56 @@ export class Game {
         break;
       case 'clone':
         this.progress.loseFraction(0.1);
-        this.hud.toast('A cheaper rival swept past and took some of your data.', 'bad');
+        this.hud.toast('A rival clone swept past and nabbed some of your data. Rude.', 'bad');
         this.audio.bad();
         break;
+    }
+  }
+
+  // ---- boss fights ---------------------------------------------------------
+
+  private updateBoss(dt: number, t: number): void {
+    const b = this.boss;
+    if (!b || this.director.active?.spec.id !== b.eventId) return;
+    const fight = b.fight;
+    const tick = fight.update(dt, t, this.player.position);
+    for (let i = 0; i < tick.summon; i++) {
+      const h = this.hunters.spawn('clone', this.player.position, b.eventId, `${fight.spec.name} mini`, fight.spec.org);
+      h.group.position.copy(fight.group.position).add(new THREE.Vector3().randomDirection().multiplyScalar(fight.size * 2));
+      h.sweep = new THREE.Vector3().subVectors(this.player.position, h.group.position).normalize();
+    }
+    if (tick.lunged) this.juice.shake(0.15);
+    b.tauntTimer -= dt;
+    if (b.tauntTimer <= 0) {
+      b.tauntTimer = 8;
+      const taunts = fight.spec.taunts;
+      this.hud.toast(`${fight.spec.name}: "${taunts[1 + Math.floor(Math.random() * (taunts.length - 1))] ?? taunts[0]}"`, 'info', 0);
+    }
+    const hit = fight.contact(this.player.position, this.player.radius);
+    if (hit === 'bonk') {
+      const dmg = this.boosting ? 2 : 1;
+      const beaten = fight.damage(dmg, this.player.position);
+      this.player.velocity.subVectors(this.player.position, fight.group.position).setLength(18);
+      this.audio.bonk();
+      this.juice.burst(fight.group.position, 0xffe35a, beaten ? 60 : 16, beaten ? 18 : 9);
+      this.juice.shake(beaten ? 0.9 : 0.35);
+      this.juice.popup(fight.group.position, dmg > 1 ? 'CRITICAL BONK! −2' : 'BONK! −1', 'bonk');
+      this.score.bonus(200 * dmg);
+      if (beaten) {
+        this.juice.callout(`${fight.spec.name}: DEFEATED!`, 'boss');
+        this.juice.flash('good');
+        this.director.signal('defeated');
+      }
+    } else if (hit === 'hurt' && t >= this.invulnerableUntil) {
+      this.invulnerableUntil = t + 1.5;
+      this.progress.loseFraction(0.06);
+      this.lost(`boss:${fight.spec.name}`);
+      this.director.signal('hit');
+      fight.repel(this.player.position);
+      this.player.velocity.subVectors(this.player.position, fight.group.position).setLength(22);
+      this.ouch(0.6);
+      this.audio.bad();
+      this.hud.toast(`Ouch! ${fight.spec.name} landed a hit. Wait until it's dizzy (flashing yellow), then bonk!`, 'bad');
     }
   }
 
@@ -858,7 +1023,7 @@ export class Game {
     } else {
       this.run.addHype(2 * this.mods.hypeGain * dt);
     }
-    if (!was) this.hud.toast('Riding the Timeline Current: user gain ×3.', 'good', 15000);
+    if (!was) this.hud.toast('Riding the Timeline Current: user gain ×3. You are trending!', 'good', 15000);
     this.postTimer -= dt;
     if (this.postTimer <= 0) {
       this.postTimer = 2.8;
@@ -915,7 +1080,11 @@ export class Game {
     if (res.newlyRogue) this.hud.toast(DANGER_TEXT.rogueFork, 'bad');
     this.processEaten(res.delivered, this.tRef, true);
     const fixed = this.swarm.resetTouched(this.player.position, this.reach());
-    if (fixed) this.hud.toast(`Reset ${fixed} rogue fork${fixed > 1 ? 's' : ''}.`, 'good');
+    if (fixed) {
+      this.hud.toast(`Reset ${fixed} rogue fork${fixed > 1 ? 's' : ''}.`, 'good');
+      this.bump('roguesFixed', fixed);
+      this.score.bonus(50 * fixed);
+    }
   }
 
   // ---- events -------------------------------------------------------------
@@ -978,8 +1147,12 @@ export class Game {
     };
     this.evt = ev;
     this.audio.sting(spec.kind);
-    const kind = spec.kind === 'hype' ? 'HYPE WAVE' : spec.kind === 'storm' ? 'STORM' : 'MOMENT';
-    this.hud.showBanner(`${kind}: ${spec.title}`, spec.banner, spec.kind);
+    this.hud.showBanner(`${KIND_LABEL[spec.kind]}: ${spec.title}`, spec.banner, spec.kind);
+    if (spec.boss) {
+      this.boss?.fight.dispose();
+      this.boss = { fight: new Boss(this.scene, spec.boss, this.player.position, this.player.radius), eventId: spec.id, tauntTimer: 5 };
+      this.juice.shake(0.4);
+    }
     const v = spec.visuals ?? {};
     const near = this.player.position;
 
@@ -1011,7 +1184,7 @@ export class Game {
           this.beacons.spawn(s.label, s.color, s.count, near);
           break;
         case 'rivalClones':
-          this.hunters.spawnTsunami(s.name, s.count, near, spec.id);
+          this.hunters.spawnTsunami(s.name, s.count, near, spec.id, s.org);
           break;
         case 'rogueForks': {
           if (this.swarm.forks.length < 3) for (let i = this.swarm.forks.length; i < 3; i++) this.swarm.fork(near);
@@ -1098,6 +1271,11 @@ export class Game {
     this.hunters.clearEvent(spec.id);
     this.beacons.clear();
     this.rivals.endStumbles();
+    const beaten = this.boss?.eventId === spec.id ? this.boss.fight : null;
+    if (beaten) {
+      beaten.dispose();
+      this.boss = null;
+    }
     this.field.skin = null;
     if (ev?.closedMesh) this.scene.remove(ev.closedMesh);
     this.field.closed = null;
@@ -1128,9 +1306,20 @@ export class Game {
       if (r.users && this.abilities.has('users')) this.run.addUsers(r.users);
       if (r.trust) this.run.addTrust(r.trust);
       if (r.alignment) this.run.addAlignment(r.alignment);
-      const bits = [r.ep ? `+${r.ep} EP` : '', r.users && this.abilities.has('users') ? `+${formatUsers(r.users)} users` : '', r.trust ? `+${r.trust} Trust` : ''].filter(Boolean);
-      outcome.push({ text: `${spec.kind === 'storm' ? 'Survived!' : 'Nice!'} ${bits.join(' · ')}`, kind: 'good' });
+      const bonus = spec.kind === 'boss' ? 1500 + (beaten?.maxHp ?? 0) * 250 : spec.kind === 'storm' ? 600 : 400;
+      this.bonusPoints(bonus, spec.kind === 'boss' ? 'BOSS BONUS' : spec.kind === 'storm' ? 'survivor bonus' : 'moment bonus');
+      const bits = [
+        r.ep ? `+${r.ep} EP` : '',
+        r.users && this.abilities.has('users') ? `+${formatUsers(r.users)} users` : '',
+        r.trust ? `+${r.trust} Trust` : '',
+        `+${bonus.toLocaleString('en-US')} points`,
+      ].filter(Boolean);
+      const head = spec.kind === 'boss' ? `${spec.boss?.defeatLine ?? 'Boss beaten!'}` : spec.kind === 'storm' ? 'Survived!' : 'Nice!';
+      outcome.push({ text: `${head} ${bits.join(' · ')}`, kind: 'good' });
       this.audio.good();
+      if (spec.kind === 'boss') this.bump('bosses');
+      else if (spec.kind === 'storm') this.bump('stormsSurvived');
+      else this.bump('momentsWon');
     } else {
       const p = spec.penalty ?? {};
       if (p.usersFraction) this.run.loseUsersFraction(p.usersFraction);
@@ -1138,7 +1327,8 @@ export class Game {
       if (p.alignment) this.run.addAlignment(p.alignment);
       if (p.ep) this.run.ep = Math.max(0, this.run.ep - p.ep);
       const bits = [p.usersFraction ? `−${Math.round(p.usersFraction * 100)}% users` : '', p.trust ? `${p.trust} Trust` : ''].filter(Boolean);
-      outcome.push({ text: `${spec.kind === 'storm' ? 'The storm hit you.' : 'Not this time.'} ${bits.join(' · ')}`, kind: spec.kind === 'storm' ? 'bad' : 'info' });
+      const head = spec.kind === 'boss' ? `${spec.boss?.name ?? 'The rival'} got away. It will brag about this in a blog post.` : spec.kind === 'storm' ? 'The storm hit you.' : 'Not this time.';
+      outcome.push({ text: `${head} ${bits.join(' · ')}`, kind: spec.kind === 'moment' ? 'info' : 'bad' });
     }
     const consequence = spec.consequence && ((spec.requiresFlag && this.run.flags.has(spec.requiresFlag)) || ev?.intensified);
     if (consequence) {
@@ -1146,6 +1336,7 @@ export class Game {
       outcome.push({ text: spec.consequence!, kind: 'info' });
     }
     if (spec.kind === 'storm') this.run.log.storms.push({ id: spec.id, title: spec.title, survived: success });
+    else if (spec.kind === 'boss') this.run.log.bosses.push({ id: spec.id, title: spec.title, won: success });
     else this.run.log.moments.push({ id: spec.id, title: spec.title, won: success });
     this.save();
     await this.pauseFor(showFactCard(this.root, { card: spec.fact, color: this.progress.current.color, outcome }));
@@ -1155,7 +1346,7 @@ export class Game {
     const ev = this.evt;
     const hype = ev?.active.spec.hype;
     if (!ev || !hype || ev.betPlaced) return;
-    if (this.run.ep < hype.cost) return this.hud.toast(`You need ${hype.cost} EP to bet on this.`, 'bad');
+    if (this.run.ep < hype.cost) return this.hud.toast(`You need ${hype.cost} EP to bet on this. Hype isn't free.`, 'bad');
     this.run.ep -= hype.cost;
     ev.betPlaced = true;
     this.betMods = [hype.upgrade];
@@ -1181,7 +1372,11 @@ export class Game {
     const outcome: { text: string; kind: 'good' | 'bad' | 'info' }[] = [
       { text: `${right ? 'Right!' : 'Not quite.'} Verdict: ${hype.verdict === 'lasting' ? 'a LASTING SHIFT' : 'PASSING HYPE'}. ${hype.verdictNote}`, kind: right ? 'good' : 'bad' },
     ];
-    if (right) this.run.ep += 1;
+    if (right) {
+      this.run.ep += 1;
+      this.bonusPoints(500, 'good call');
+      this.bump('hypeRight');
+    }
     if (bet && hype.verdict === 'lasting') {
       this.run.permanent.push({ id: spec.id, name: hype.upgradeName, modifiers: hype.upgrade });
       outcome.push({ text: `"${hype.upgradeName}" stays with you for good.`, kind: 'good' });
@@ -1242,6 +1437,7 @@ export class Game {
       for (let i = 0; i < INTERNET_BIOME.extraEels; i++) this.hunters.spawn('eel', this.player.position, 'biome');
       this.hud.toast(INTERNET_BIOME.enterToast, 'info', 0);
       this.audio.good();
+      this.bump('internetTrips');
     }
   }
 
@@ -1296,6 +1492,12 @@ export class Game {
     this.run.ep += 3 + bonus;
     this.audio.evolve();
     this.hud.showBanner(`Evolved: ${next.name}`, next.fact.date, 'evolve');
+    const evoBonus = Math.round(500 + accuracy * 1500);
+    this.bonusPoints(evoBonus, 'evolution bonus');
+    this.juice.burst(this.player.position, next.color, 40, 14);
+    this.bump('evolutions');
+    if (accuracy >= 0.9) this.bump('perfectDiets');
+    this.bump('bestScore', this.score.total);
     this.internetUntil = 0;
     this.hunters.clearEvent('biome');
     this.save();
@@ -1304,7 +1506,12 @@ export class Game {
       card: next.fact,
       color: next.color,
       diet: { mine, real: realMix, note: next.recipeNote },
-      outcome: [{ text: `+${3 + bonus} EP${bonus ? ' (bonus for a close match)' : ''} · diet match ${Math.round(accuracy * 100)}%`, kind: 'good' }],
+      outcome: [
+        {
+          text: `+${3 + bonus} EP${bonus ? ' (bonus for a close match)' : ''} · diet match ${Math.round(accuracy * 100)}% · +${evoBonus.toLocaleString('en-US')} points`,
+          kind: 'good',
+        },
+      ],
     });
     if (next.finale) {
       this.finale();
@@ -1324,9 +1531,20 @@ export class Game {
     this.finished = true;
     this.paused = true;
     clearSave();
+    this.bump('bestScore', this.score.total);
+    this.bump(this.lineage === 'gpt' ? 'finishedGpt' : 'finishedClaude');
+    this.meta.recordScore(this.lineage, this.score.total);
+    const newBest = this.score.total > this.startBest;
+    const best = Math.max(this.startBest, this.score.total);
+    this.meta.save();
     const recap = buildRecap(this.forms, this.run.log);
     const form = this.progress.current;
-    showRecap(this.root, recap, { title: `${form.name}: your run`, color: form.color, onRestart: () => location.reload() });
+    showRecap(this.root, recap, {
+      title: `${form.name}: your run`,
+      color: form.color,
+      onRestart: () => location.reload(),
+      points: { score: this.score.total, best, newBest, bestCombo: this.score.bestCombo },
+    });
   }
 
   private async pauseFor<T>(p: Promise<T>): Promise<T> {
@@ -1343,7 +1561,10 @@ export class Game {
       formIndex: this.progress.formIndex,
       run: this.run.toJSON(),
       done: [...this.director.done],
+      score: this.score.total,
     });
+    this.meta.recordScore(this.lineage, this.score.total);
+    this.meta.save();
   }
 
   // ---- HUD ----------------------------------------------------------------
@@ -1359,7 +1580,7 @@ export class Game {
         objective: spec.hype ? `Grab hype orbs. ${spec.hype.upgradeName}: ${spec.hype.upgradeBlurb}` : spec.objectiveText ?? '',
         timeFraction: Math.max(0, a.timeLeft / spec.durationSec),
         secondsLeft: Math.max(0, a.timeLeft),
-        progress: this.director.progress(),
+        progress: this.boss && this.boss.eventId === spec.id ? 1 - this.boss.fight.hp / this.boss.fight.maxHp : this.director.progress(),
         bet: spec.hype
           ? { label: spec.hype.upgradeName, cost: spec.hype.cost, placed: !!this.evt?.betPlaced, affordable: this.run.ep >= spec.hype.cost }
           : undefined,
@@ -1405,6 +1626,11 @@ export class Game {
       event,
       riding: this.riding,
       lingering: this.run.lingering.map((l) => l.label),
+      score: this.score.total,
+      combo: this.score.combo,
+      multiplier: this.score.multiplier(),
+      comboAlive: this.score.alive(this.tRef),
+      highScore: this.startBest,
     });
   }
 
@@ -1417,14 +1643,15 @@ export class Game {
 
   private placeCamera(t: number): void {
     const dir = this.lookDirection(this.forward);
-    const dist = 7 + this.player.radius * 3.2;
+    const dist = 9 + this.player.radius * 4.4;
     this.camera.position.copy(this.player.position).addScaledVector(dir, -dist);
-    this.camera.position.y += dist * 0.25;
+    this.camera.position.y += dist * 0.3;
     if (!this.settings.reducedMotion && this.evt?.active.spec.kind === 'storm') {
       this.camera.position.x += Math.sin(t * 13) * 0.15;
       this.camera.position.y += Math.cos(t * 11) * 0.15;
     }
-    this.camera.lookAt(this.lookTarget.copy(this.player.position).addScaledVector(dir, 3));
+    // Look a little ahead and above, so your creature sits low in the frame and you see where you're going.
+    this.camera.lookAt(this.lookTarget.copy(this.player.position).addScaledVector(dir, 6).addScaledVector(THREE.Object3D.DEFAULT_UP, this.player.radius * 0.8));
   }
 
   private resize(): void {

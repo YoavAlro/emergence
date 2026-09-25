@@ -7,6 +7,8 @@ export interface SaveData {
   run?: SerializedRun;
   /** Event ids already played. */
   done?: string[];
+  /** Score so far this run. */
+  score?: number;
 }
 
 export interface Settings {
@@ -26,7 +28,7 @@ export function loadSave(): SaveData | null {
     if (!raw) return null;
     const data = JSON.parse(raw) as Partial<SaveData>;
     if ((data.lineage === 'gpt' || data.lineage === 'claude') && typeof data.formIndex === 'number') {
-      return { lineage: data.lineage, formIndex: data.formIndex, run: data.run, done: data.done };
+      return { lineage: data.lineage, formIndex: data.formIndex, run: data.run, done: data.done, score: data.score };
     }
   } catch {
     // Storage blocked or corrupt: start fresh.

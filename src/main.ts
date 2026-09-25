@@ -1,3 +1,8 @@
+import '@fontsource/baloo-2/latin-600.css';
+import '@fontsource/baloo-2/latin-800.css';
+import '@fontsource/nunito/latin-400.css';
+import '@fontsource/nunito/latin-700.css';
+import '@fontsource/nunito/latin-800.css';
 import './style.css';
 import { Game } from './game/Game';
 import { loadSettings } from './save';

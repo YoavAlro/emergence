@@ -1,12 +1,15 @@
+import type { Meta } from '../game/Meta';
 import type { Settings } from '../save';
 import { el } from './dom';
 import { showPanel } from './FactCard';
 
-export type MenuResult = 'resume' | 'quit';
+export type MenuResult = 'resume' | 'quit' | 'trophies';
 
 const HOW_TO = [
   'Eat the data your real lab trained on. The diet panel shows your mix against the target; match it at least 65% to evolve.',
-  'Hallucinations (rainbow) and toxic smog (red clouds) cost you data. Rivals, sharks, jailbreakers, and eels hunt you.',
+  'Hallucinations (rainbow question marks) and toxic smog (purple clouds) cost you data. Rivals, sharks, jailbreakers, and eels hunt you.',
+  'Eat quickly for combos: every 8 in a row adds ×0.5 to your points (up to ×5). Getting hit breaks the combo.',
+  'Boss fights: each era a rival lab’s model shows up. Dodge while it attacks, then bonk it while it is dizzy (flashing yellow). BOOST into it for double damage.',
   'Stage 2+: spend evolution points (EP) in the creature editor. Keep Alignment up by eating Human Feedback.',
   'Stage 3+: ride the Timeline Current to go viral. Bet EP on Hype Waves, then decide: hype or lasting shift?',
   'Stage 4+: GRAB with tool limbs and swim through portals into the live internet.',
@@ -16,12 +19,12 @@ const HOW_TO = [
 ];
 
 /** Pause menu with settings. */
-export function showMenu(parent: HTMLElement, settings: Settings, onSettings: (s: Settings) => void): Promise<MenuResult> {
+export function showMenu(parent: HTMLElement, settings: Settings, onSettings: (s: Settings) => void, meta?: Meta): Promise<MenuResult> {
   return new Promise((resolve) => {
     const { body, close } = showPanel(parent, 'Paused', 0x7fd4ff, 'menu');
     const toggles: { key: keyof Settings; label: string }[] = [
       { key: 'audio', label: 'Sound' },
-      { key: 'reducedMotion', label: 'Reduced motion (less bloom and camera sway)' },
+      { key: 'reducedMotion', label: 'Reduced motion (no screen shake or camera sway)' },
       { key: 'largeText', label: 'Larger text' },
     ];
     for (const t of toggles) {
@@ -69,7 +72,16 @@ export function showMenu(parent: HTMLElement, settings: Settings, onSettings: (s
       close();
       resolve('quit');
     });
-    row.append(resume, quit);
+    row.append(resume);
+    if (meta) {
+      const trophies = el('button', 'btn', `Trophies & skins (${meta.data.achievements.length})`);
+      trophies.addEventListener('click', () => {
+        close();
+        resolve('trophies');
+      });
+      row.append(trophies);
+    }
+    row.append(quit);
     body.append(row);
     resume.focus();
   });

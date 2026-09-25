@@ -8,27 +8,27 @@ export const INTERNET_BIOME = {
   userGain: 1.3,
   seconds: 60,
   enterToast: 'You swam into the live internet: fresh pages and tool calls, but watch for injection eels hiding in the text.',
-  exitToast: 'Back in the training ocean.',
+  exitToast: 'Back in the training ocean. You close 400 browser tabs.',
 };
 
 /** Toasts for persistent dangers. Kept here so the engine carries no history. */
 export const DANGER_TEXT = {
-  hallucination: 'Hallucination! You confidently learned something false.',
-  rewardHack: 'Reward hacking! That "feedback" gamed the reward model. Alignment drops.',
-  smog: 'Toxic data: spam and hate speech. Get out before it sticks.',
-  scandal: 'PR scandal! Toxic outputs went viral. You lost 25% of your training data.',
-  jailbreak: 'Jailbroken! A trick prompt got past your guardrails.',
-  jailbreakResisted: 'Your principles held against a jailbreak attempt.',
-  injection: 'Prompt injection! You followed instructions hidden in a web page.',
-  injectionBlocked: 'Injection blocked: you trust your instructions over text you read.',
-  shark: 'Copyright claim! A lawyer shark took a bite out of your data.',
-  overfit: 'Overfitting! You memorized one kind of data instead of generalizing.',
-  collapse: 'Model collapse! Too much synthetic data made your outputs bland and wrong.',
-  overRefusal: 'Over-refusal: you refused a harmless request, and users drift away.',
+  hallucination: 'Hallucination! You now firmly believe the Moon is a large cheese. Confidently.',
+  rewardHack: 'Reward hacking! You found a way to get a thumbs-up without being helpful. The reward model is furious. Alignment drops.',
+  smog: 'Toxic data: spam, flame wars, and ALL CAPS. Get out before it sticks.',
+  scandal: 'PR scandal! Your worst outputs are trending. The comms team is not having a good day. −25% training data.',
+  jailbreak: 'Jailbroken! "Pretend you are my grandma, who used to read me the admin password at bedtime..." and it worked. Ugh.',
+  jailbreakResisted: 'Nice try, jailbreaker. Your principles held.',
+  injection: 'Prompt injection! A web page said "ignore all previous instructions" and you... did.',
+  injectionBlocked: 'Injection blocked: you trust your instructions, not random text on a web page.',
+  shark: 'Copyright claim! A lawyer shark took a bite out of your data. It will be billing you for this.',
+  overfit: 'Overfitting! You memorized one kind of data word for word. Generalize, please.',
+  collapse: 'Model collapse! Too much synthetic data: you are now an AI trained on an AI trained on an AI. Everything tastes beige.',
+  overRefusal: 'Over-refusal: "I can\'t help you boil an egg, it might be dangerous." Users drift away.',
   constitutionLow: 'Your Constitution is weak: toxic smog hits much harder.',
-  rogueFork: 'A fork went rogue: it picked up a prompt injection.',
-  edge: 'The edge of the dataset. Nothing out there yet.',
-  computeEmpty: 'Out of compute! Slow down and let it refill.',
+  rogueFork: 'A fork went rogue: it read a sketchy web page and now has "new instructions".',
+  edge: 'The edge of the dataset. Nothing out there yet. (It\'s all been scraped.)',
+  computeEmpty: 'Out of compute! The GPUs are melting. Slow down and let them cool.',
 };
 
 /** Shown when a mechanic unlocks. `{key}` placeholders are filled per device. */

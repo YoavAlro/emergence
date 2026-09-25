@@ -1,6 +1,7 @@
 import type { EventSpec } from './types';
 import { CLAUDE_EVENTS } from './claudeEvents';
 import { MOMENTS } from './moments';
+import { BOSSES } from './bosses';
 
 /**
  * Hype Waves and Storms. `at` pins each one to the era (current form) in which
@@ -454,7 +455,7 @@ export const HYPES_AND_STORMS: EventSpec[] = [
     objectiveText: 'Survive the tsunami: 3 hits max',
     objective: { kind: 'avoidHits', max: 3 },
     modifiers: { computeCost: 2 },
-    spawns: [{ what: 'rivalClones', name: 'DeepSeek-R1', count: 10 }],
+    spawns: [{ what: 'rivalClones', name: 'DeepSeek-R1', org: 'DeepSeek', count: 10 }],
     reward: { ep: 2 },
     penalty: { usersFraction: 0.1 },
     posts: ['A new reasoning model is free, open, and #1 on the App Store.', 'Chip stocks are having a very bad day.'],
@@ -651,4 +652,4 @@ export const HYPES_AND_STORMS: EventSpec[] = [
   },
 ];
 
-export const EVENTS: EventSpec[] = [...HYPES_AND_STORMS, ...MOMENTS, ...CLAUDE_EVENTS];
+export const EVENTS: EventSpec[] = [...HYPES_AND_STORMS, ...MOMENTS, ...CLAUDE_EVENTS, ...BOSSES];

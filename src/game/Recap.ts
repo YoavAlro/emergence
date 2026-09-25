@@ -11,7 +11,7 @@ export interface RecapRow {
 
 export interface Recap {
   headline: string;
-  score: { dietAverage: number; hypeCalls: [number, number]; storms: [number, number]; moments: [number, number] };
+  score: { dietAverage: number; hypeCalls: [number, number]; storms: [number, number]; moments: [number, number]; bosses: [number, number] };
   timeline: RecapRow[];
   hype: RecapRow[];
   storms: RecapRow[];
@@ -69,7 +69,7 @@ export function buildRecap(forms: ModelForm[], log: RunLog): Recap {
 
   return {
     headline,
-    score: { dietAverage, hypeCalls, storms: [survived, log.storms.length], moments: [momentsWon, log.moments.length] },
+    score: { dietAverage, hypeCalls, storms: [survived, log.storms.length], moments: [momentsWon, log.moments.length], bosses: [(log.bosses ?? []).filter((b) => b.won).length, (log.bosses ?? []).length] },
     timeline,
     hype,
     storms,

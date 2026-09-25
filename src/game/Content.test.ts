@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { DATA_TYPES, bucketOf, type DataTypeId } from '../config/dataTypes';
+import { BOSSES } from '../config/bosses';
 import { EVENTS } from '../config/events';
+import { LABS, labFor } from '../config/labs';
 import { LINEAGES } from '../config/models';
 import { PARTS } from '../config/parts';
 import { RECURRING_GAGS } from '../config/timeline';
@@ -173,10 +175,36 @@ describe('content integrity', () => {
     }
   });
 
-  it('has both kinds of hype verdicts and all three event kinds', () => {
+  it('has both kinds of hype verdicts and all four event kinds', () => {
     const verdicts = new Set(EVENTS.filter((e) => e.hype).map((e) => e.hype!.verdict));
     expect(verdicts).toEqual(new Set(['lasting', 'passing']));
-    expect(new Set(EVENTS.map((e) => e.kind))).toEqual(new Set(['hype', 'storm', 'moment']));
+    expect(new Set(EVENTS.map((e) => e.kind))).toEqual(new Set(['hype', 'storm', 'moment', 'boss']));
+  });
+
+  it('has one boss per stage in each lineage, from a known lab, with a sourced card', () => {
+    for (const l of lineages) {
+      const forms = LINEAGES[l].forms;
+      const mine = BOSSES.filter((b) => b.at[l]);
+      const stages = mine.map((b) => forms.find((f) => f.id === b.at[l])?.stage);
+      expect(stages.every((s) => s !== undefined), `${l}: boss forms exist`).toBe(true);
+      expect(new Set(stages).size, `${l}: one per stage`).toBe(mine.length);
+      expect(mine.length, l).toBe(7);
+    }
+    for (const b of BOSSES) {
+      expect(b.kind).toBe('boss');
+      expect(b.objective?.kind).toBe('defeat');
+      expect(b.boss!.hp).toBeGreaterThan(0);
+      expect(b.boss!.taunts.length, b.id).toBeGreaterThan(1);
+      expect(labFor(b.boss!.org).id, `${b.id}: known lab`).not.toBe('other');
+      checkCard(b.fact, b.id);
+      expect(EVENTS).toContain(b);
+    }
+  });
+
+  it('gives each lab its own emblem', () => {
+    for (const l of lineages) for (const f of LINEAGES[l].forms) for (const r of f.rivals) expect(labFor(r.org).id, `${f.id}: ${r.org}`).not.toBe('other');
+    expect(new Set(LABS.map((l) => l.icon)).size).toBe(LABS.length);
+    for (const e of EVENTS) for (const s of e.spawns ?? []) if (s.what === 'rivalClones' && s.org) expect(labFor(s.org).id).not.toBe('other');
   });
 
   it('keeps posts anonymous (no @handles or quotes attributed to people)', () => {

@@ -11,7 +11,7 @@ const OUT = 'smoke-shots';
 const lineages = process.argv.slice(2).length ? process.argv.slice(2) : ['gpt', 'claude'];
 mkdirSync(OUT, { recursive: true });
 
-const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe' });
+const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe' });
 await new Promise((resolve, reject) => {
   const timer = setTimeout(() => reject(new Error('preview server did not start')), 20000);
   server.stdout.on('data', (d) => {
@@ -39,6 +39,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const SHOWCASE = {
   gpt: [
     { form: 'gpt-3', label: 'stage1' },
+    { form: 'gpt-1', label: 'boss', event: 'boss-bert', wait: 2600 },
     { form: 'codex', label: 'stage2-editor', editor: true },
     { form: 'chatgpt', label: 'stage3-current', event: 'first-surge' },
     { form: 'plugins', label: 'stage4-tools', event: 'autogpt' },
@@ -48,6 +49,7 @@ const SHOWCASE = {
   ],
   claude: [
     { form: 'claude-research', label: 'stage1' },
+    { form: 'claude-3', label: 'boss', event: 'boss-gpt4o', wait: 2600 },
     { form: 'cai', label: 'stage2-constitution' },
     { form: 'claude-2', label: 'stage3-current' },
     { form: 'claude-3', label: 'stage4-sizeforms', event: 'golden-gate' },
@@ -70,6 +72,12 @@ for (const lineage of lineages) {
       await page.goto(`${BASE}?debug`);
       await page.waitForSelector(`.lineage.${lineage}`);
       await shot('00-title');
+      await page.click('.trophies-btn');
+      await page.waitForSelector('.modal.trophies');
+      await sleep(200);
+      await shot('00b-trophies');
+      await page.click('.modal.trophies .btn.primary');
+      await sleep(200);
       await page.click(`.lineage.${lineage}`);
       await page.waitForSelector('.modal .btn.primary');
       await sleep(400);
@@ -101,6 +109,12 @@ for (const lineage of lineages) {
       if (!moved) throw new Error('debug API missing');
       await shot('02-playing');
 
+      // Let the autopilot eat for a moment: score popups and combos.
+      await page.evaluate(() => window.__emergence.bot(true, 3));
+      await sleep(5000);
+      await page.evaluate(() => window.__emergence.bot(false, 1));
+      await shot('03-combo');
+
       // Stage showcase.
       for (const s of SHOWCASE[lineage]) {
         const idx = await page.evaluate((id) => {
@@ -111,8 +125,9 @@ for (const lineage of lineages) {
         await page.evaluate((i) => window.__emergence.jump(i), idx);
         await sleep(600);
         if (s.event) {
-          await page.evaluate((id) => window.__emergence.trigger(id), s.event);
-          await sleep(1400);
+          const ok = await page.evaluate((id) => window.__emergence.trigger(id), s.event);
+          if (!ok) throw new Error(`unknown event ${s.event}`);
+          await sleep(s.wait ?? 1400);
         }
         if (s.fork) {
           await page.evaluate(() => {

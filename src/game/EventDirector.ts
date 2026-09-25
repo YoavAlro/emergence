@@ -23,6 +23,7 @@ export interface ActiveEvent {
   badPickups: number;
   goodTime: number;
   failed: boolean;
+  defeated: boolean;
   minigameResult: boolean | null;
 }
 
@@ -113,6 +114,7 @@ export class EventDirector {
         badPickups: 0,
         goodTime: 0,
         failed: false,
+        defeated: false,
         minigameResult: null,
       };
       out.push({ type: 'start', active: this.active });
@@ -121,12 +123,13 @@ export class EventDirector {
   }
 
   /** Something happened that objectives count. */
-  signal(kind: 'collect' | 'hit' | 'eat' | 'badPickup', n = 1): void {
+  signal(kind: 'collect' | 'hit' | 'eat' | 'badPickup' | 'defeated', n = 1): void {
     const a = this.active;
     if (!a) return;
     if (kind === 'collect') a.collected += n;
     else if (kind === 'hit') a.hits += n;
     else if (kind === 'eat') a.eaten += n;
+    else if (kind === 'defeated') a.defeated = true;
     else a.badPickups += n;
   }
 
@@ -180,6 +183,7 @@ export class EventDirector {
     if (o.kind === 'collect' && o.endsEarly && a.collected >= o.count) return true;
     if (o.kind === 'eat' && o.endsEarly && a.eaten >= o.count) return true;
     if (o.kind === 'noRogues' && a.elapsed > 3 && ctx.rogues === 0) return true;
+    if (o.kind === 'defeat' && a.defeated) return true;
     return null;
   }
 
@@ -198,6 +202,7 @@ export class EventDirector {
       case 'slowDown':
         return a.goodTime >= o.fraction * a.spec.durationSec;
       case 'noRogues':
+      case 'defeat':
         return false;
       default:
         return !a.failed;

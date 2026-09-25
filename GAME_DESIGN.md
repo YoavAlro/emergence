@@ -136,8 +136,9 @@ It costs compute per second, which teaches test-time compute: spend more, answer
 - Every fact card line must be verifiable. Mark facts: ✅ well-established · 🔎 recent;
   verify against a primary source (lab announcement, system card, court filing) before shipping.
 - Use conservative wording for estimates ("an estimated 100M users").
-- Real company and model names appear only as historical facts. No logos, no impersonation,
-  and no invented quotes.
+- Real company and model names appear only as historical facts. No real logos (labs get original
+  doodled emblems that don't imitate their marks), no impersonation, and no invented quotes. Boss
+  taunts are jokes spoken by cartoon rivals about situations, never lines attributed to people.
 - Political and legal events (bans, lawsuits, government disputes) are stated neutrally, as
   facts with dates. The game never takes sides beyond what the record shows.
 - The title screen always shows the non-affiliation disclaimer.
@@ -170,14 +171,19 @@ It costs compute per second, which teaches test-time compute: spend more, answer
 | M6 ✅ | Stage 7 (GPT) | Frontier gates, Trust meter, GPT-5.6 → **GPT-6 Astra** finale and recap |
 | M7 ✅ | Claude lineage | `CLAUDE_FORMS` 1–7, Constitution food and meter, Claude-only storms → **Opus 5.5** |
 | M8 ✅ | Polish | Audio, accessibility, a performance pass, a fact-verification pass over every 🔎 |
+| M9 ✅ | Cartoon & game feel | Toon shading and ink outlines, doodled data icons, original lab emblems, score and combos, popups and screen shake, one rival-lab boss per stage per lineage, achievements, skins, trophy case |
 
 Notes on the build (Sep 2026):
 - M2–M6 landed together: the shared, data-driven engine (meters, events, mechanics) was built once
   and the GPT content for Stages 2–7 on top of it.
 - Playtime is measured with `scripts/playtime.mjs`, an autopilot that plays with the real mechanics
-  (events, storms, gates) but skips reading. Latest runs: GPT start → GPT-6 Astra in ~38 sim-minutes,
-  Claude start → Opus 5.5 in ~33. The autopilot never misses, so people take longer; with ~40 fact
+  (events, storms, gates) but skips reading. Latest runs (with boss fights): GPT start → GPT-6 Astra in
+  ~46 sim-minutes, Claude start → Opus 5.5 in ~41, beating all 7 bosses in each. The autopilot never misses, so people take longer; with ~40 fact
   cards and five mini-games to read and play, a full run is estimated at 60–90 minutes.
+- M9: bosses live in `src/config/bosses.ts` (each with a sourced fact card) and fight in three
+  phases: attack (charge, spray, summon, or orbit), dizzy (bonk it; boost for 2 damage), recoil.
+  Combos build ×0.5 per 8 quick on-diet bites, up to ×5; hits break them. Lifetime stats,
+  achievements, high scores, and the chosen skin are stored in localStorage (`emergence.meta.v1`).
 - M8: WebAudio synth (no audio files), reduced motion, larger text, focus-trapped dialogs, live
   regions for toasts, full keyboard and touch parity, adaptive resolution, lower particle counts on
   touch devices, and two fact-check passes (every recent fact checked against primary sources).

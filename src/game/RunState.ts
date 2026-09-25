@@ -24,6 +24,7 @@ export interface RunLog {
   bets: HypeBet[];
   storms: { id: string; title: string; survived: boolean }[];
   moments: { id: string; title: string; won: boolean }[];
+  bosses: { id: string; title: string; won: boolean }[];
   consequences: string[];
   peakUsers: number;
   resetsUsed: number;
@@ -74,6 +75,7 @@ export class RunState {
     bets: [],
     storms: [],
     moments: [],
+    bosses: [],
     consequences: [],
     peakUsers: 0,
     resetsUsed: 0,

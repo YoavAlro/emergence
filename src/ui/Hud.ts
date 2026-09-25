@@ -6,8 +6,17 @@ import { ACCURACY_TO_EVOLVE } from '../game/Progress';
 import { CONSTITUTION_HIGH, CONSTITUTION_LOW, formatUsers, type GateCheck } from '../game/RunState';
 import { el, hex, pct } from './dom';
 
+export type BannerKind = 'hype' | 'storm' | 'moment' | 'boss' | 'evolve';
+
+export const KIND_LABEL: Record<Exclude<BannerKind, 'evolve'>, string> = {
+  hype: 'HYPE WAVE',
+  storm: 'STORM',
+  moment: 'MOMENT',
+  boss: 'BOSS FIGHT',
+};
+
 export interface HudEvent {
-  kind: 'hype' | 'storm' | 'moment';
+  kind: 'hype' | 'storm' | 'moment' | 'boss';
   title: string;
   objective: string;
   timeFraction: number;
@@ -41,6 +50,11 @@ export interface HudState {
   event: HudEvent | null;
   riding: boolean;
   lingering: string[];
+  score: number;
+  combo: number;
+  multiplier: number;
+  comboAlive: boolean;
+  highScore: number;
 }
 
 interface DietRow {
@@ -109,6 +123,13 @@ export class Hud {
   private readonly ticker = el('div', 'hud-ticker');
   private readonly bubble = el('div', 'hud-bubble');
   private readonly toasts = el('div', 'toasts');
+  private readonly scoreBox = el('div', 'panel hud-score');
+  private readonly scoreValue = el('div', 'score-value');
+  private readonly scoreBest = el('div', 'score-best');
+  private readonly comboBox = el('div', 'hud-combo');
+  private readonly trophies = el('div', 'trophy-toasts');
+  private shownScore = 0;
+  private lastCombo = 0;
   private readonly buttons = new Map<Action, HTMLButtonElement>();
   private readonly topButtons = new Map<Action, HTMLButtonElement>();
   private readonly hint = el('div', 'hint');
@@ -195,8 +216,10 @@ export class Hud {
     const left = el('div', 'hud-left');
     left.append(card, this.eventPanel);
     const right = el('div', 'hud-right');
-    right.append(this.meters, top);
-    this.root.append(left, right, this.banner, this.ticker, this.bubble, this.toasts);
+    this.scoreBox.append(this.scoreValue, this.comboBox, this.scoreBest);
+    right.append(this.scoreBox, this.meters, top);
+    this.trophies.setAttribute('aria-live', 'polite');
+    this.root.append(left, right, this.banner, this.ticker, this.bubble, this.toasts, this.trophies);
 
     const pad = el('div', 'action-pad');
     for (const b of BUTTONS) {
@@ -269,9 +292,40 @@ export class Hud {
     ].filter(Boolean);
     this.epLine.textContent = extras.join(' · ');
 
+    this.renderScore(s);
     this.renderEvent(s.event);
     this.renderButtons(s);
     this.ticker.classList.toggle('visible', s.riding);
+  }
+
+  private renderScore(s: HudState): void {
+    // Count up toward the real score so points visibly roll in.
+    this.shownScore += Math.ceil((s.score - this.shownScore) * 0.35);
+    if (s.score < this.shownScore) this.shownScore = s.score;
+    this.scoreValue.textContent = this.shownScore.toLocaleString('en-US');
+    this.scoreBest.textContent = s.highScore ? `Best ${s.highScore.toLocaleString('en-US')}` : '';
+    const alive = s.comboAlive && s.combo >= 3;
+    this.comboBox.hidden = !alive;
+    if (alive) {
+      this.comboBox.textContent = `${s.combo} combo · ×${s.multiplier}`;
+      if (s.combo > this.lastCombo && s.combo % 8 === 0) {
+        this.comboBox.classList.remove('pop');
+        void this.comboBox.offsetWidth;
+        this.comboBox.classList.add('pop');
+      }
+    }
+    this.lastCombo = s.combo;
+  }
+
+  /** Achievement sticker that slides in. */
+  trophy(name: string, desc: string): void {
+    const node = el('div', 'trophy-toast');
+    node.append(el('div', 'trophy-icon', '🏆'), el('div', 'trophy-text'));
+    node.lastElementChild!.append(el('strong', undefined, `Achievement: ${name}`), el('span', undefined, desc));
+    this.trophies.append(node);
+    while (this.trophies.children.length > 2) this.trophies.firstChild?.remove();
+    setTimeout(() => node.classList.add('fade'), 4200);
+    setTimeout(() => node.remove(), 4800);
   }
 
   private setMeter(key: string, value: number, visible: boolean, text: string): void {
@@ -286,7 +340,7 @@ export class Hud {
     this.eventPanel.hidden = !e;
     if (!e) return;
     this.eventPanel.dataset.kind = e.kind;
-    const kindLabel = e.kind === 'hype' ? 'HYPE WAVE' : e.kind === 'storm' ? 'STORM' : 'MOMENT';
+    const kindLabel = KIND_LABEL[e.kind];
     this.eventTitle.textContent = `${kindLabel} · ${e.title} · ${Math.ceil(e.secondsLeft)}s`;
     this.eventObjective.textContent = e.objective;
     this.eventTimer.style.width = pct(e.timeFraction);
@@ -318,7 +372,7 @@ export class Hud {
   }
 
   /** Big announcement at the top of the screen. */
-  showBanner(title: string, text: string, kind: 'hype' | 'storm' | 'moment' | 'evolve', seconds = 4.5): void {
+  showBanner(title: string, text: string, kind: BannerKind, seconds = 4.5): void {
     this.banner.replaceChildren(el('strong', undefined, title), el('span', undefined, text));
     this.banner.dataset.kind = kind;
     this.banner.classList.add('visible');

@@ -27,12 +27,13 @@ while (Date.now() - start < Number(maxMin) * 60_000) {
     const sim = s.run.log.playSeconds / 60;
     console.log(`${new Date().toISOString().slice(11, 19)} form ${s.formIndex} ${s.formId} · sim ${sim.toFixed(1)} min · users ${Math.round(s.run.users)} · align ${Math.round(s.run.alignment)} · trust ${Math.round(s.run.trust)}`);
   }
-  if (++tick % 6 === 0) console.log(`   … ${s.formId} eaten ${s.eaten} acc ${Math.round(s.accuracy * 100)}% users ${Math.round(s.run.users)} align ${Math.round(s.run.alignment)} trust ${Math.round(s.run.trust)} const ${Math.round(s.run.constitution)} event ${s.event} pending ${s.pending.length} losses ${JSON.stringify(s.losses)}`);
+  if (++tick % 6 === 0) console.log(`   … ${s.formId} eaten ${s.eaten} acc ${Math.round(s.accuracy * 100)}% users ${Math.round(s.run.users)} align ${Math.round(s.run.alignment)} trust ${Math.round(s.run.trust)} const ${Math.round(s.run.constitution)} event ${s.event} pending ${s.pending.length} counts ${JSON.stringify(s.counts)} losses ${JSON.stringify(s.losses)}`);
   if (s.finished) break;
 }
 const s = await page.evaluate(() => window.__emergence.state());
 console.log('\nPer era (sim minutes):');
 for (const f of s.run.log.forms) console.log(`  ${f.name.padEnd(28)} ${(f.seconds / 60).toFixed(1)}  diet ${Math.round(f.accuracy * 100)}%`);
+console.log(`Bosses: ${(s.run.log.bosses ?? []).map((b) => `${b.title} ${b.won ? 'WON' : 'lost'}`).join(' · ')}`);
 console.log(`Total sim: ${(s.run.log.playSeconds / 60).toFixed(1)} min · finished: ${s.finished} · stuck at: ${s.formId} (next ${s.next}) event ${s.event} pending ${s.pending}`);
 if (errors.length) console.log('ERRORS', errors);
 await browser.close();

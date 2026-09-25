@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import type { RivalSpec } from '../config/types';
+import { makeCritter, type Critter } from './critter';
 import { makeLabel } from './labels';
 import { randomInSphere } from './Ocean';
 
 export interface Rival {
   spec: RivalSpec;
   group: THREE.Group;
+  critter: Critter;
   velocity: THREE.Vector3;
   wander: THREE.Vector3;
   size: number;
@@ -16,13 +18,13 @@ export interface Rival {
 }
 
 const CHASE_RANGE = 45;
+const STUMBLE_COLOR = new THREE.Color(0x9aa0ad);
 
-/** Competing labs' models: bigger predators that hunt you. */
+/** Competing labs' models: bigger cartoon predators that hunt you. */
 export class Rivals {
   readonly group = new THREE.Group();
   list: Rival[] = [];
-  private readonly mat = new THREE.MeshStandardMaterial({ color: 0xff3d7f, emissive: 0xff1f5a, emissiveIntensity: 1.4 });
-  private readonly stumbleMat = new THREE.MeshStandardMaterial({ color: 0x8890a0, emissive: 0x404858, emissiveIntensity: 1 });
+  private readonly tmp = new THREE.Vector3();
 
   constructor(scene: THREE.Scene, private readonly radius: number) {
     scene.add(this.group);
@@ -35,19 +37,19 @@ export class Rivals {
   }
 
   private make(spec: RivalSpec, size: number, avoid: THREE.Vector3, currentPoint: (() => THREE.Vector3) | undefined, guest: boolean): Rival {
-    const group = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.IcosahedronGeometry(size, 0), this.mat);
+    const critter = makeCritter(spec.org, size);
+    const group = critter.group;
     const label = makeLabel(`${spec.name} · ${spec.org}`);
     label.scale.set(size * 5, size * 1.25, 1);
-    label.position.y = size * 1.9;
-    group.add(body, label);
+    label.position.y = size * 2.3;
+    group.add(label);
     if (currentPoint) group.position.copy(currentPoint());
     else {
       do randomInSphere(this.radius * 0.8, group.position);
       while (group.position.distanceTo(avoid) < 40);
     }
     this.group.add(group);
-    return { spec, group, size, velocity: new THREE.Vector3(), wander: randomInSphere(this.radius * 0.8), stumbling: 0, guest };
+    return { spec, group, critter, size, velocity: new THREE.Vector3(), wander: randomInSphere(this.radius * 0.8), stumbling: 0, guest };
   }
 
   /** A rival stumbles (a public blunder). Spawns a guest rival nearby if it isn't in this era. */
@@ -59,7 +61,8 @@ export class Rivals {
       this.list.push(r);
     }
     r.stumbling = seconds;
-    (r.group.children[0] as THREE.Mesh).material = this.stumbleMat;
+    r.critter.mat.color.copy(STUMBLE_COLOR);
+    r.critter.mat.emissive.copy(STUMBLE_COLOR);
     return r;
   }
 
@@ -68,7 +71,8 @@ export class Rivals {
     this.list = this.list.filter((q) => !q.guest);
     for (const r of this.list) {
       r.stumbling = 0;
-      (r.group.children[0] as THREE.Mesh).material = this.mat;
+      r.critter.mat.color.setHex(r.critter.baseColor);
+      r.critter.mat.emissive.setHex(r.critter.baseColor);
     }
   }
 
@@ -83,8 +87,16 @@ export class Rivals {
       desired.subVectors(chasing ? playerPos : r.wander, pos).normalize().multiplyScalar(speed * speedScale);
       r.velocity.lerp(desired, Math.min(1, dt * 1.2));
       pos.addScaledVector(r.velocity, dt);
-      const spin = r.stumbling ? 4 : 1;
-      r.group.children[0].rotation.set(t * 0.7 * spin, t * 0.5 * spin, 0);
+      const body = r.critter.body;
+      if (r.stumbling) body.rotation.set(t * 3, t * 2, Math.sin(t * 6) * 0.5);
+      else {
+        body.lookAt(this.tmp.copy(pos).add(r.velocity));
+        // A menacing bob.
+        body.position.y = Math.sin(t * 3 + r.group.id) * r.size * 0.12;
+      }
+      const s = 1 + Math.sin(t * 6 + r.group.id) * 0.05;
+      body.scale.set(r.size * s, r.size / s, r.size * s);
+      r.critter.eyes.update(t);
     }
   }
 

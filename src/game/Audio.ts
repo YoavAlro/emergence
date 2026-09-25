@@ -86,10 +86,38 @@ export class Audio {
     this.tone(990, 0.2, 'triangle', 0.08, 0.08);
   }
 
-  sting(kind: 'hype' | 'storm' | 'moment'): void {
-    if (kind === 'storm') [196, 185, 174].forEach((f, i) => this.tone(f, 0.5, 'sawtooth', 0.07, i * 0.15));
+  sting(kind: 'hype' | 'storm' | 'moment' | 'boss'): void {
+    if (kind === 'boss') [98, 98, 131, 123].forEach((f, i) => this.tone(f, 0.35, 'square', 0.07, i * 0.18));
+    else if (kind === 'storm') [196, 185, 174].forEach((f, i) => this.tone(f, 0.5, 'sawtooth', 0.07, i * 0.15));
     else if (kind === 'hype') [523, 659, 784, 1046].forEach((f, i) => this.tone(f, 0.25, 'triangle', 0.08, i * 0.08));
     else [440, 554, 659].forEach((f, i) => this.tone(f, 0.2, 'sine', 0.1, i * 0.1));
+  }
+
+  /** Combo milestone: a rising arpeggio. */
+  combo(level: number): void {
+    const base = 392 * 2 ** (Math.min(level, 6) / 12);
+    [1, 1.25, 1.5, 2].forEach((m, i) => this.tone(base * m, 0.14, 'square', 0.05, i * 0.05));
+  }
+
+  /** A boss takes a hit: a cartoon bonk. */
+  bonk(): void {
+    if (!this.ctx || !this.master || !this.enabled) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(700, t);
+    o.frequency.exponentialRampToValueAtTime(140, t + 0.18);
+    g.gain.setValueAtTime(0.18, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    o.connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.25);
+  }
+
+  /** Achievement unlocked: a little fanfare. */
+  fanfare(): void {
+    [523.3, 659.3, 784, 1046.5, 784, 1046.5].forEach((f, i) => this.tone(f, i > 3 ? 0.35 : 0.12, 'square', 0.05, i * 0.09));
   }
 
   evolve(): void {

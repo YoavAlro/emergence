@@ -5,6 +5,11 @@ Transformer, eat the data the real models trained on, and evolve through real mo
 from GPT-1 to **GPT-6 Astra** or from a 2021 research model to **Claude Opus 5.5**. Ride hype
 waves, survive storms pinned to real incidents, and laugh at the funny moments along the way.
 
+It's drawn like a cartoon: toon-shaded creatures with ink outlines, hand-doodled data icons with a
+"line boil" wobble, and sticker-style HUD panels. Eat fast for **combos** (up to ×5 points), bonk a
+**rival-lab boss** in every stage (dodge while it attacks, hit it while it's dizzy), and unlock
+**achievements and skins** (party hat, shades, a crown...) that carry across runs.
+
 The full design brief is in **[GAME_DESIGN.md](GAME_DESIGN.md)**; the goal is in [GOAL_PROMPT.md](GOAL_PROMPT.md).
 
 ## Play locally
@@ -32,16 +37,18 @@ node scripts/playtime.mjs gpt   # autopilot playthrough that reports minutes per
 | Switch size form (Claude 3, GPT-5.6) | Q | FORM |
 | Bet on a Hype Wave | B | Tap the bet button |
 | Use a banked reset | X | RESET |
-| Menu (settings, how to play) | Esc | ❚❚ |
+| Bonk a dizzy boss (double damage) | Boost into it | BOOST into it |
+| Menu (settings, trophies & skins, how to play) | Esc | ❚❚ |
 
 ## Project layout
 
 | Path | What it is |
 |---|---|
-| `src/config/` | **All content**: `gptForms.ts`, `claudeForms.ts` (every model form, recipe, gate, fact card), `events.ts` + `claudeEvents.ts` (hypes and storms), `moments.ts`, `timeline.ts` (Current posts, the Tibo Reset), `parts.ts` (creature editor), `dataTypes.ts`, `world.ts` |
+| `src/config/` | **All content**: `gptForms.ts`, `claudeForms.ts` (every model form, recipe, gate, fact card), `events.ts` + `claudeEvents.ts` (hypes and storms), `moments.ts`, `timeline.ts` (Current posts, the Tibo Reset), `parts.ts` (creature editor), `dataTypes.ts`, `world.ts`, `bosses.ts` (one rival-lab boss per stage), `labs.ts` (original lab emblems), `achievements.ts` (achievements and skins) |
 | `src/config/types.ts` | The content schema: forms, events, objectives, modifiers |
 | `src/game/Game.ts` | Renderer, main loop, and the glue that runs config-driven effects |
-| `src/game/Progress.ts`, `RunState.ts`, `EventDirector.ts`, `Recap.ts`, `swarmRules.ts` | Pure game logic (unit tested) |
+| `src/game/Progress.ts`, `RunState.ts`, `EventDirector.ts`, `Recap.ts`, `swarmRules.ts`, `Score.ts`, `Meta.ts` | Pure game logic (unit tested) |
+| `src/game/toon.ts`, `critter.ts`, `Boss.ts`, `Juice.ts`, `src/ui/doodle.ts` | The cartoon look: toon materials, outlines, eyes, doodled icons and emblems, popups, bursts, screen shake |
 | `src/game/DataField.ts`, `TimelineCurrent.ts`, `Swarm.ts`, `Hunters.ts`, `Pickups.ts`, `Portals.ts`, ... | World systems |
 | `src/ui/` | HUD, fact cards, editor, mini-games, recap, menu, title screen |
 | `scripts/smoke.mjs`, `scripts/playtime.mjs` | Headless checks |
@@ -62,4 +69,5 @@ GitHub Pages. Enable it once under **Settings → Pages → Source: GitHub Actio
 ---
 
 An educational fan project, not affiliated with or endorsed by OpenAI, Anthropic, or any other
-organization named. No logos are used, and every fact card lists its sources.
+organization named. No real logos are used (the lab emblems are original doodles), rival lines are
+jokes about situations rather than quotes, and every fact card lists its sources.
