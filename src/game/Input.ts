@@ -1,10 +1,39 @@
-/** Keyboard + mouse on desktop, virtual joystick + drag-to-look on touch. */
+export type Action =
+  | 'boost'
+  | 'think'
+  | 'grab'
+  | 'fork'
+  | 'target'
+  | 'recall'
+  | 'reset'
+  | 'editor'
+  | 'form'
+  | 'bet'
+  | 'pause';
+
+/** Keyboard bindings. Touch buttons drive the same actions through `hold` and `tap`. */
+export const KEY_BINDINGS: Record<Action, string[]> = {
+  boost: ['ShiftLeft', 'ShiftRight'],
+  think: ['Space'],
+  grab: ['KeyE'],
+  fork: ['KeyF'],
+  target: ['KeyT'],
+  recall: ['KeyR'],
+  reset: ['KeyX'],
+  editor: ['KeyC', 'Tab'],
+  form: ['KeyQ'],
+  bet: ['KeyB'],
+  pause: ['Escape', 'KeyP'],
+};
+
+/** Keyboard + mouse on desktop, virtual joystick + drag-to-look + buttons on touch. */
 export class Input {
   /** x = strafe (-1..1), y = forward (-1..1). */
   readonly move = { x: 0, y: 0 };
-  boost = false;
 
   private readonly keys = new Set<string>();
+  private readonly held = new Set<Action>();
+  private readonly taps = new Set<Action>();
   private lookDX = 0;
   private lookDY = 0;
   private lookPointer: { id: number; x: number; y: number } | null = null;
@@ -12,6 +41,8 @@ export class Input {
   private readonly stickBase: HTMLDivElement;
   private readonly stickKnob: HTMLDivElement;
   private static readonly STICK_RADIUS = 56;
+  /** Set while a modal is open so keys don't leak into the game. */
+  suspended = false;
 
   constructor(surface: HTMLElement, overlay: HTMLElement) {
     this.stickBase = document.createElement('div');
@@ -21,9 +52,20 @@ export class Input {
     this.stickBase.append(this.stickKnob);
     overlay.append(this.stickBase);
 
-    window.addEventListener('keydown', (e) => this.keys.add(e.code));
+    window.addEventListener('keydown', (e) => {
+      if (isTyping(e)) return;
+      const action = actionFor(e.code);
+      if (action && !this.suspended) {
+        if (e.code === 'Tab' || e.code === 'Space') e.preventDefault();
+        if (!e.repeat) this.taps.add(action);
+      }
+      this.keys.add(e.code);
+    });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('blur', () => {
+      this.keys.clear();
+      this.held.clear();
+    });
 
     surface.addEventListener('pointerdown', (e) => this.onDown(e));
     window.addEventListener('pointermove', (e) => this.onMove(e));
@@ -32,7 +74,34 @@ export class Input {
   }
 
   static isTouchDevice(): boolean {
-    return window.matchMedia('(pointer: coarse)').matches;
+    return window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0 && window.matchMedia('(hover: none)').matches;
+  }
+
+  /** Touch button held state. */
+  hold(action: Action, down: boolean): void {
+    if (down) this.held.add(action);
+    else this.held.delete(action);
+    if (down) this.taps.add(action);
+  }
+
+  tap(action: Action): void {
+    this.taps.add(action);
+  }
+
+  isHeld(action: Action): boolean {
+    if (this.suspended) return false;
+    return this.held.has(action) || KEY_BINDINGS[action].some((k) => this.keys.has(k));
+  }
+
+  /** True once per press. */
+  consumeTap(action: Action): boolean {
+    const had = this.taps.has(action);
+    this.taps.delete(action);
+    return had && !this.suspended;
+  }
+
+  clearTaps(): void {
+    this.taps.clear();
   }
 
   /** Returns look movement since the last call, in pixels. */
@@ -50,14 +119,15 @@ export class Input {
       this.move.y = clamp(-(this.stick.y - this.stick.oy) / r);
       return;
     }
+    if (this.suspended) {
+      this.move.x = 0;
+      this.move.y = 0;
+      return;
+    }
     const k = this.keys;
     this.move.x = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
     this.move.y = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
-    if (!this.boostHeld) this.boost = k.has('ShiftLeft') || k.has('ShiftRight');
   }
-
-  /** Set by the on-screen boost button so the keyboard doesn't override it. */
-  boostHeld = false;
 
   private onDown(e: PointerEvent): void {
     const isLeftHalf = e.clientX < window.innerWidth * 0.45;
@@ -111,3 +181,12 @@ export class Input {
 }
 
 const clamp = (v: number) => Math.max(-1, Math.min(1, v));
+
+function actionFor(code: string): Action | undefined {
+  return (Object.keys(KEY_BINDINGS) as Action[]).find((a) => KEY_BINDINGS[a].includes(code));
+}
+
+function isTyping(e: KeyboardEvent): boolean {
+  const t = e.target as HTMLElement | null;
+  return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA');
+}

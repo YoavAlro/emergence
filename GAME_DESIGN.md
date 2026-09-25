@@ -94,9 +94,10 @@ the **Em Dash** trail, and **Golden Gate Claude**. Rule: laugh at situations, no
 never invent quotes. Full list in [docs/moments.md](docs/moments.md).
 
 ### 6. Persistent dangers (always around, scaling by stage)
-Hallucinations ✅ · Toxic smog ✅ · Rival labs ✅ · Compute starvation ✅ · Model collapse
-(eating synthetic data you made) · Overfitting · Reward hacking · Jailbreakers ·
-Prompt-injection eels (Stage 4+) · Lawyer sharks (copyright) · Runaway agents (Stage 6+).
+Hallucinations ✅ · Toxic smog ✅ · Rival labs ✅ · Compute starvation ✅ · Model collapse ✅
+(too much synthetic data) · Overfitting ✅ (long single-type streaks the recipe doesn't want) ·
+Reward hacking ✅ (fake feedback orbs, grey in Think mode) · Jailbreakers ✅ · Prompt-injection eels ✅
+(Stage 4+, camouflaged until you think) · Lawyer sharks ✅ (copyright storms) · Runaway agents ✅ (Stage 6+).
 
 ### 7. Consequences carry forward
 What you ate early can come back later. Example on the Claude path: eating "shadow-library"
@@ -139,14 +140,21 @@ It costs compute per second, which teaches test-time compute: spend more, answer
   facts with dates. The game never takes sides beyond what the record shows.
 - The title screen always shows the non-affiliation disclaimer.
 
-## Tech notes for the new systems
+## Tech notes (as built)
 
-- `src/config/models.ts` gains `lineage` and a `stage` value from 1 to 7. Claude forms go in a `CLAUDE_FORMS` list.
-- New `src/config/events.ts`: `{ id, kind: 'hype' | 'storm', lineage: 'gpt' | 'claude' | 'both',
-  atForm, durationSec, verdict?: 'lasting' | 'passing', effect, fact }`.
-- New `EventDirector`: schedules each event when the player enters its era and runs its effect.
-- The Timeline Current is a spline tube of instanced "post" quads with a flow field along it.
-- Swarm agents are boids that reuse `DataField.collect()`.
+- `src/config/types.ts` is the content schema. Forms (`gptForms.ts`, `claudeForms.ts`) carry `lineage`,
+  `stage` 1–7, a recipe, a spawn mix, `unlocks` / `trainUnlocks` (mechanics), `parts`, a `gate`
+  (Alignment, Users, Trust, a Constitution band, or a phased `rollout`), and a sourced fact card.
+- Events (`events.ts`, `claudeEvents.ts`, `moments.ts`) are `{ id, kind: 'hype' | 'storm' | 'moment',
+  at: { gpt?, claude? }, delaySec, durationSec, objective, modifiers, spawns, visuals, minigame?, hype?,
+  requiresFlag?, fact }`. Effects are built from a shared vocabulary, so new history needs no engine code.
+- `EventDirector` (pure, tested) schedules each era's events and scores objectives; evolution waits until
+  the era's events are done, and pending events hurry once the diet is ready.
+- The Timeline Current is a Catmull-Rom tube with instanced post quads and a flow field.
+- Swarm forks are boids that forage through `DataField.nearest()` / `take()`; infection rules are in
+  `swarmRules.ts`.
+- `Content.test.ts` checks every lineage for sourced cards, eatable recipes, reachable gates, and a full
+  start-to-finale playthrough.
 
 ## Milestones
 

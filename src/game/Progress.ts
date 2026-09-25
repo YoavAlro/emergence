@@ -1,20 +1,20 @@
-import { DATA_TYPES, DATA_TYPE_IDS, type DataTypeId } from '../config/dataTypes';
-import type { ModelForm } from '../config/models';
+import { DATA_TYPES, DATA_TYPE_IDS, bucketOf, type DataTypeId } from '../config/dataTypes';
+import type { ModelForm } from '../config/types';
 
 /** How closely your diet must match the real training mix to evolve. */
 export const ACCURACY_TO_EVOLVE = 0.65;
 
-type Counts = Record<DataTypeId, number>;
+export type Counts = Record<DataTypeId, number>;
 
-const emptyCounts = (): Counts =>
+export const emptyCounts = (): Counts =>
   Object.fromEntries(DATA_TYPE_IDS.map((id) => [id, 0])) as Counts;
 
-/** Tracks what the player ate toward the next model and whether they can evolve. */
+/** Tracks what the player ate toward the next model and whether the diet is ready. */
 export class Progress {
   counts: Counts = emptyCounts();
 
   constructor(
-    private readonly forms: ModelForm[],
+    readonly forms: ModelForm[],
     public formIndex = 0,
   ) {}
 
@@ -22,18 +22,18 @@ export class Progress {
     return this.forms[this.formIndex];
   }
 
-  /** The next playable form, or undefined once the built content runs out. */
+  /** The next form, or undefined at the finale. */
   get next(): ModelForm | undefined {
-    const next = this.forms[this.formIndex + 1];
-    return next?.playable ? next : undefined;
+    return this.forms[this.formIndex + 1];
   }
 
   get eaten(): number {
     return DATA_TYPE_IDS.reduce((sum, id) => sum + this.counts[id], 0);
   }
 
-  add(type: DataTypeId): void {
-    this.counts[type]++;
+  /** Adds `n` pieces, counted toward the type's diet bucket (pirated books count as Books). */
+  add(type: DataTypeId, n = 1): void {
+    this.counts[bucketOf(type)] += n;
   }
 
   loseFraction(fraction: number): void {
@@ -47,6 +47,11 @@ export class Progress {
       if (this.counts[top] === 0) return;
       this.counts[top]--;
     }
+  }
+
+  loseType(type: DataTypeId, n: number): void {
+    const id = bucketOf(type);
+    this.counts[id] = Math.max(0, this.counts[id] - n);
   }
 
   mix(): Counts {
@@ -69,7 +74,8 @@ export class Progress {
     return 1 - distance / 2;
   }
 
-  canEvolve(): boolean {
+  /** The data target is met and the diet matches history (gates are checked separately). */
+  dietReady(): boolean {
     const next = this.next;
     return !!next && this.eaten >= next.target && this.accuracy() >= ACCURACY_TO_EVOLVE;
   }
