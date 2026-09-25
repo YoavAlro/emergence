@@ -312,7 +312,7 @@ export interface Combined {
   controls: 'normal' | 'locked' | 'scrambled';
 }
 
-/** Stacks modifiers: multipliers multiply, flat values add, sets union. */
+/** Stacks modifiers: multipliers multiply, flat values add, data bonuses add (max ×2), sets union. */
 export function combineModifiers(list: Modifiers[]): Combined {
   const out: Combined = {
     speed: 1,
@@ -341,7 +341,8 @@ export function combineModifiers(list: Modifiers[]): Combined {
     if (m.toxResist) out.toxResist = 1 - (1 - out.toxResist) * (1 - m.toxResist);
     for (const [type, mult] of Object.entries(m.dataMult ?? {})) {
       const id = type as DataTypeId;
-      out.dataMult[id] = (out.dataMult[id] ?? 1) * (mult ?? 1);
+      // Bonuses add up, capped at ×2 so no single type trivializes a diet.
+      out.dataMult[id] = Math.min(2, (out.dataMult[id] ?? 1) + ((mult ?? 1) - 1));
     }
     for (const t of m.magnet ?? []) out.magnet.add(t);
     for (const t of m.convertToUsers ?? []) out.convertToUsers.add(t);

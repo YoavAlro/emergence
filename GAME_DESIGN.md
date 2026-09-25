@@ -174,7 +174,10 @@ It costs compute per second, which teaches test-time compute: spend more, answer
 Notes on the build (Sep 2026):
 - M2–M6 landed together: the shared, data-driven engine (meters, events, mechanics) was built once
   and the GPT content for Stages 2–7 on top of it.
-- Playtime is measured with `scripts/playtime.mjs`, an autopilot that plays with the real mechanics.
+- Playtime is measured with `scripts/playtime.mjs`, an autopilot that plays with the real mechanics
+  (events, storms, gates) but skips reading. Latest runs: GPT start → GPT-6 Astra in ~38 sim-minutes,
+  Claude start → Opus 5.5 in ~33. The autopilot never misses, so people take longer; with ~40 fact
+  cards and five mini-games to read and play, a full run is estimated at 60–90 minutes.
 - M8: WebAudio synth (no audio files), reduced motion, larger text, focus-trapped dialogs, live
   regions for toasts, full keyboard and touch parity, adaptive resolution, lower particle counts on
   touch devices, and two fact-check passes (every recent fact checked against primary sources).

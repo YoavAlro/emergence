@@ -121,6 +121,11 @@ describe('modifiers', () => {
     expect(m.toxResist).toBeCloseTo(0.75);
     expect(m.controls).toBe('scrambled');
   });
+
+  it('adds data bonuses instead of multiplying them, up to ×2', () => {
+    expect(combineModifiers([{ dataMult: { tools: 1.5 } }, { dataMult: { tools: 1.25 } }]).dataMult.tools).toBe(1.75);
+    expect(combineModifiers([{ dataMult: { tools: 2 } }, { dataMult: { tools: 2 } }]).dataMult.tools).toBe(2);
+  });
 });
 
 describe('gates', () => {

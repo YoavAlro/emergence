@@ -12,6 +12,8 @@ export const emptyCounts = (): Counts =>
 /** Tracks what the player ate toward the next model and whether the diet is ready. */
 export class Progress {
   counts: Counts = emptyCounts();
+  /** Bonus pieces (from parts and upgrades) that count toward the target but not the mix. */
+  bonus = 0;
 
   constructor(
     readonly forms: ModelForm[],
@@ -27,8 +29,14 @@ export class Progress {
     return this.forms[this.formIndex + 1];
   }
 
-  get eaten(): number {
+  /** Pieces in the diet (what the mix is made of). */
+  get dietSize(): number {
     return DATA_TYPE_IDS.reduce((sum, id) => sum + this.counts[id], 0);
+  }
+
+  /** Progress toward the data target, including bonus pieces. */
+  get eaten(): number {
+    return this.dietSize + this.bonus;
   }
 
   /** Adds `n` pieces, counted toward the type's diet bucket (pirated books count as Books). */
@@ -36,8 +44,25 @@ export class Progress {
     this.counts[bucketOf(type)] += n;
   }
 
-  loseFraction(fraction: number): void {
-    for (const id of DATA_TYPE_IDS) this.counts[id] = Math.floor(this.counts[id] * (1 - fraction));
+  /** Adds bonus progress that doesn't change the mix. */
+  addBonus(n: number): void {
+    this.bonus += n;
+  }
+
+  /** Loses about `fraction` of everything eaten, picked at random so the mix is preserved on average. */
+  loseFraction(fraction: number, rng: () => number = Math.random): void {
+    this.bonus = Math.floor(this.bonus * (1 - fraction));
+    const n = Math.max(1, Math.round(this.dietSize * fraction));
+    for (let i = 0; i < n && this.dietSize > 0; i++) {
+      let roll = rng() * this.dietSize;
+      for (const id of DATA_TYPE_IDS) {
+        roll -= this.counts[id];
+        if (roll < 0) {
+          this.counts[id]--;
+          break;
+        }
+      }
+    }
   }
 
   /** Removes `n` pieces, taking from whatever the player has most of. */
@@ -55,7 +80,7 @@ export class Progress {
   }
 
   mix(): Counts {
-    const total = this.eaten;
+    const total = this.dietSize;
     const shares = emptyCounts();
     if (total === 0) return shares;
     for (const id of DATA_TYPE_IDS) shares[id] = this.counts[id] / total;
@@ -65,7 +90,7 @@ export class Progress {
   /** 1 = your diet matches the real training mix exactly, 0 = no overlap. */
   accuracy(): number {
     const next = this.next;
-    if (!next || this.eaten === 0) return 0;
+    if (!next || this.dietSize === 0) return 0;
     const mix = this.mix();
     const distance = DATA_TYPE_IDS.reduce(
       (sum, id) => sum + Math.abs(mix[id] - (next.recipe[id] ?? 0)),
@@ -83,7 +108,7 @@ export class Progress {
   /** Advice on the biggest gap between your diet and the real one. */
   hint(): string | null {
     const next = this.next;
-    if (!next || this.eaten === 0) return null;
+    if (!next || this.dietSize === 0) return null;
     const mix = this.mix();
     const gaps = DATA_TYPE_IDS.map((id) => ({ id, gap: (next.recipe[id] ?? 0) - mix[id] }));
     const deficit = gaps.reduce((a, b) => (b.gap > a.gap ? b : a));
@@ -97,6 +122,7 @@ export class Progress {
   evolve(): ModelForm {
     this.formIndex++;
     this.counts = emptyCounts();
+    this.bonus = 0;
     return this.current;
   }
 }

@@ -47,6 +47,17 @@ describe('Progress', () => {
     expect(p.counts.web).toBe(2);
   });
 
+  it('loseFraction removes about that share, weighted by the mix', () => {
+    const p = new Progress(GPT_FORMS);
+    feed(p, 'books', 60);
+    feed(p, 'web', 40);
+    let i = 0;
+    p.loseFraction(0.1, () => (i++ % 10) / 10);
+    expect(p.eaten).toBe(90);
+    expect(p.counts.books).toBe(54);
+    expect(p.counts.web).toBe(36);
+  });
+
   it('has no next form at the finale', () => {
     const p = new Progress(GPT_FORMS, GPT_FORMS.length - 1);
     expect(p.next).toBeUndefined();

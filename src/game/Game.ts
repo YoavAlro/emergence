@@ -362,7 +362,9 @@ export class Game {
     this.pickups.update(dt * worldScale, t, this.player.position, (p, pdt) => this.ridePickup(p, pdt));
 
     const reach = this.reach();
-    if (this.mods.magnet.size) this.field.attract(this.player.position, this.mods.magnet, reach * 4, dt);
+    // Magnets pull the types your target recipe wants (a part never lures you into decoys).
+    const wanted = new Set([...this.mods.magnet].filter((t) => (this.progress.next?.recipe[t] ?? 0) > 0));
+    if (wanted.size) this.field.attract(this.player.position, wanted, reach * 2, dt * 0.45);
     if (this.grabbing) this.field.attract(this.player.position, new Set(DATA_TYPE_IDS), reach * 5, dt * 2.5);
     this.eat(t);
     this.touchPickups();
@@ -638,7 +640,8 @@ export class Game {
     const recipe = next?.recipe ?? {};
     for (const kind of kinds) {
       if (kind === 'hallucination') {
-        this.progress.loseAny(3);
+        // Proportional loss: a false fact hurts everything a little, without skewing the mix.
+        this.progress.loseFraction(0.03);
         this.lost('hallucination');
         if (!fromFork) this.driftUntil = t + 4;
         this.hud.toast(DANGER_TEXT.hallucination, 'bad');
@@ -646,7 +649,7 @@ export class Game {
         continue;
       }
       if (kind === 'rewardHack') {
-        this.run.addAlignment(-6);
+        this.run.addAlignment(-3);
         this.hud.toast(DANGER_TEXT.rewardHack, 'bad');
         this.audio.bad();
         continue;
@@ -662,8 +665,11 @@ export class Game {
         this.hud.toast(DANGER_TEXT.overRefusal, 'bad');
         continue;
       }
-      const n = Math.max(1, Math.round((this.mods.dataMult[kind] ?? 1) * (DATA_TYPES[kind].weight ?? 1)));
+      // A type's weight shapes the diet; part and upgrade bonuses only speed up training.
+      const n = Math.max(1, Math.round(DATA_TYPES[kind].weight ?? 1));
+      const bonus = Math.round(n * ((this.mods.dataMult[kind] ?? 1) - 1));
       this.progress.add(kind, n);
+      if (bonus > 0) this.progress.addBonus(bonus);
       this.director.signal('eat', n);
       this.eatTimes.push(t);
       this.audio.eat(DATA_TYPE_IDS.indexOf(kind));
@@ -673,7 +679,7 @@ export class Game {
         this.hud.toast(DANGER_TEXT.overfit, 'bad', 0);
       }
       const bucket = bucketOf(kind);
-      if (this.abilities.has('alignment') && bucket === 'feedback') this.run.addAlignment(0.9);
+      if (this.abilities.has('alignment') && bucket === 'feedback') this.run.addAlignment(1.5);
       if (bucket === 'constitution') {
         // Diminishing returns: each principle matters less the more you already hold.
         this.run.addConstitution(1.5 * (1 - this.run.constitution / 100));
@@ -814,7 +820,7 @@ export class Game {
         else {
           this.driftUntil = t + 3;
           this.run.addAlignment(-6);
-          this.progress.loseAny(5);
+          this.progress.loseFraction(0.05);
           this.hud.toast(DANGER_TEXT.injection, 'bad');
           this.audio.bad();
         }
@@ -875,7 +881,7 @@ export class Game {
     const m = this.mods;
     if (m.alignmentDrift) this.run.addAlignment(m.alignmentDrift * dt);
     // Safety training never stops: Alignment slowly recovers while you stay out of toxic data.
-    if (this.abilities.has('alignment') && this.run.toxicity === 0 && this.run.alignment < 60) this.run.addAlignment(0.12 * dt);
+    if (this.abilities.has('alignment') && !this.smog.contains(this.player.position) && this.run.alignment < 60) this.run.addAlignment(0.15 * dt);
     // Reputation recovers slowly while nothing is going wrong.
     if (this.abilities.has('trust') && this.run.toxicity === 0 && this.run.trust < 50 && !this.evt) this.run.addTrust(0.08 * dt);
     if (m.trustDrift && this.abilities.has('trust')) this.run.addTrust(m.trustDrift * dt);
@@ -1508,6 +1514,7 @@ export class Game {
       jump: (formIndex: number) => {
         this.progress.formIndex = Math.max(0, Math.min(this.forms.length - 1, formIndex));
         this.progress.counts = new Progress(this.forms).counts;
+        this.progress.bonus = 0;
         this.run.ep += 6;
         this.setupEra(true);
       },
