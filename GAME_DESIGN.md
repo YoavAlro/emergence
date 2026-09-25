@@ -4,124 +4,151 @@
 
 ## One-line pitch
 
-You are an early language model swimming in a glowing ocean of data. You eat the same data
-your real-life lab trained on, evolve through real model versions, dodge the dangers that
-nearly derailed real labs, and grow from a blank Transformer into ChatGPT.
+You are an early language model swimming in a glowing ocean of data. You eat the data your
+real-life lab trained on, evolve through real model versions, ride the hype waves, survive
+the storms that nearly derailed real labs, and grow from a blank network into a frontier
+model: **GPT-6 Astra** on the GPT path, **Claude Opus 5.5** on the Claude path.
 
 ## Core fantasy
 
-Spore's cell → creature → tribe arc, retold as AI history: **pre-training → alignment →
-deployment**. The player should come away knowing, roughly and accurately, how LLMs came to be.
+Spore's arc (cell → creature → tribe → civilization → space), retold as AI history in
+**seven stages**, from pre-training to swarms of agents. The player should come away knowing
+roughly, and accurately, how we got from "predict the next word" to autonomous agents, and
+which moments were real shifts and which were passing hype.
 
 ## Decisions (locked)
 
 | Topic | Decision |
 |---|---|
 | Name | **Emergence** |
-| Lineage | **OpenAI / GPT first**. Claude lineage comes later and is shown as "coming soon". |
-| Scope | **Stages 1–3**: Token Soup → Alignment → Deployment (ends at the ChatGPT launch) |
+| Lineages | **GPT** (built first) and **Claude**. Both play through all seven stages. |
+| Endgame | GPT → **GPT-6 Astra** (Sep 2026) · Claude → **Claude Opus 5.5** (Sep 2026) |
 | Tone | **Educational**: real dates, real training data, and short accurate fact cards. Playful, never satirical. |
-| Platform | **Desktop and mobile** from day one: touch joystick, drag-to-look, boost button |
+| Platform | **Desktop and mobile** from day one |
+| X / Twitter | A world system called the **Timeline Current**, which spreads virality and hype (see below) |
+| Events | **Hype Waves** (passing or lasting) and **Storms** (dangers that last only for a moment), both timed to real history |
 
-## Tech stack
+Detail lives in:
+- [docs/lineage-gpt.md](docs/lineage-gpt.md): every GPT form, stage by stage
+- [docs/lineage-claude.md](docs/lineage-claude.md): every Claude form, stage by stage
+- [docs/events.md](docs/events.md): the catalog of hypes, storms, and Timeline moments
 
-- Three.js + TypeScript + Vite. No backend; runs fully in the browser.
-- Bloom postprocessing (`UnrealBloomPass`) for the bioluminescent look.
-- One `InstancedMesh` for all data particles.
-- DOM overlay for the HUD and fact cards.
-- Save to `localStorage`.
-- Deploy to GitHub Pages from CI.
-- **Data-driven**: every model, data type, rival, and fact lives in `src/config/`.
-  Adding a model means adding a config entry, not engine code.
-- Target: 60fps on a laptop, 30+ on a mid-range phone (fewer particles, lower pixel ratio on touch).
+## The seven stages
 
-## The world: the Data Ocean
-
-A spherical 3D sea bounded by a faint neural lattice. You swim in 3rd person, and forward
-means wherever you are looking. Data floats as glowing particles, colored by type:
-
-| Type | Color | Real-world source |
-|---|---|---|
-| Books | blue | BookCorpus, Books1/Books2 |
-| Web | green | WebText (Reddit-linked pages), Common Crawl |
-| Wikipedia | white | English Wikipedia |
-| Code | orange | GitHub (unlocks in Stage 2) |
-| Human Feedback | gold | Labeler rankings for RLHF (Stage 2+) |
-
-## Core loop
-
-1. Each model has a **target amount** of data and a **real training recipe**.
-2. The ocean offers a *mix* of types, including decoys. You choose what to eat.
-3. Your **Diet match** (1 − ½·L1 distance between your mix and the real recipe) must reach
-   **65%** to evolve. This is how the game teaches what each model actually trained on.
-4. On evolving, a fact card shows the real model, its date and size, and your diet against the real one.
-
-## Progression
-
-### Stage 1 · Token Soup (Pre-training), like Spore's Cell stage (✅ built)
-
-| Evolve into | Date | Size | Real recipe | Rival predator |
+| # | Stage | Spore analog | Era | New mechanic |
 |---|---|---|---|---|
-| (start) Transformer | Jun 2017 | untrained | n/a | none |
-| GPT-1 | Jun 2018 | 117M | Books 100% (BookCorpus) | ELMo (AllenAI) |
-| GPT-2 | Feb 2019 | 1.5B | Web 100% (WebText) | BERT (Google) |
-| GPT-3 | May 2020 | 175B | Web 81% · Books 16% · Wiki 3% | T5 (Google), Turing-NLG (Microsoft) |
+| 1 | **Token Soup** (pre-training) | Cell | 2017–2020 | Eat the real training mix to evolve ✅ *built* |
+| 2 | **Alignment** (RLHF / Constitution) | Creature | 2021–2022 | Alignment meter, creature editor, gold feedback |
+| 3 | **Viral Launch** (users) | Tribal | Nov 2022–2023 | User swarm, **Timeline Current**, first Hype Waves and Storms |
+| 4 | **Tools & Internet** | Civilization | 2023–2024 | Tool limbs; portals into the live-internet biome; prompt-injection eels |
+| 5 | **Reasoning** | Early Space | Sep 2024–2025 | **Think mode**: slow time and spend compute to see hidden truth |
+| 6 | **The Swarm** (agents) | Space: colonies | 2025–mid 2026 | **Fork sub-agents** that forage; agent teams that coordinate |
+| 7 | **Frontier** | Space: galactic core | 2026 | Capability gates vs safeguards; phased rollout; the lineage finale |
 
-### Stage 2 · Alignment (Fine-tuning & RLHF), like Spore's Creature stage (next)
+## Core systems
 
-- **Codex** (Aug 2021): eat Code. Unlocks a "code limb" part.
-- **InstructGPT** (Jan 2022): eat rare gold Human Feedback. It introduces an **Alignment** meter
-  and a **creature editor** where you spend evolution points on parts:
-  - Attention Heads: wider eat/vision radius
-  - Context Window: a tail that lengthens and gives a longer boost
-  - Code Limbs: faster movement
-  - Refusal Shell: resists jailbreakers
-- Lesson: the 1.3B InstructGPT beat the 175B GPT-3 with human raters. Alignment beats raw size.
+### 1. Diet (built)
+Each model has a target amount of data and a real training recipe. Your **Diet match**
+(1 − ½·L1 distance between your mix and the recipe) must reach 65% to evolve. From Stage 2 on,
+new "foods" unlock: Code, Human Feedback, Constitution principles (Claude), Tool calls,
+Reasoning traces, and Synthetic data.
 
-### Stage 3 · Deployment (Users), like Spore's Tribal stage (next)
+### 2. Meters
+Parameters (size) · Compute · Toxicity · **Alignment** (Stage 2+) · **Users** (Stage 3+) ·
+**Hype** (Stage 3+) · **Trust** (Stage 7: regulators and the public).
 
-- **ChatGPT launch** (Nov 30, 2022): the ocean floods with **users**, small lights that
-  orbit you. A counter races through "1M users in 5 days" and "~100M by Jan 2023".
-- Users generate feedback (gold) and compute (revenue), but also bring **jailbreakers**.
-- Keep users happy (helpfulness), keep toxicity low, and fend off rival chatbots.
-- Stage ends with a GPT-4 (Mar 2023) teaser, which leads into a future Stage 4 (Tools / Internet access).
+### 3. The Timeline Current (X / Twitter)
+From Stage 3 on, a bright, fast river of posts flows through the ocean.
+- **Riding it** multiplies your user gain, because virality is how ChatGPT reached a million users in five days.
+- **Screenshot moments**: an impressive streak (combo eating, a clean evolution) creates a
+  "screenshot" that floats into the Current and pulls users toward you.
+- **Backlash**: the same Current carries viral failures (e.g. the Bing "Sydney" transcripts).
+  When a Storm hits, the Current turns red and pushes users away.
+- **Rival born in the Current**: Grok (xAI, launched on X in Nov 2023) spawns from it.
+- It also delivers **Hype Waves**. Every hype in [docs/events.md](docs/events.md) arrives through it.
+- Rule: posts are anonymous, paraphrased summaries of real moments ("AI Twitter is sharing
+  ChatGPT screenshots"). **Never fabricate a quote or post attributed to a real person.**
 
-## Dangers
+### 4. Hype Waves: passing or lasting
+A timed global event. A banner announces it, the Current glows, and hype orbs flood in.
+- Eating hype orbs gives fast Users and Hype, and lets you spend evolution points on the hype's upgrade.
+- When the wave ends, a **"Hype or shift?"** verdict card appears:
+  - **Lasting shift** (e.g. MCP, reasoning models, vibe coding): the upgrade stays and becomes permanent.
+  - **Passing hype** (e.g. AutoGPT, AI hardware pins, Moltbook): the upgrade evaporates, and a
+    short **hype hangover** follows (users drift away).
+- The lesson: learning to tell the two apart. The recap screen scores your bets.
 
-| Danger | In-game form | Effect | Status |
-|---|---|---|---|
-| Hallucination | Iridescent, color-shifting particles that look like food | Lose data; controls drift for 4s | ✅ |
-| Toxic data | Drifting red smog clouds | Toxicity rises; at 100 a **PR scandal** costs 25% of your data | ✅ |
-| Rival labs | Bigger predator models, labeled with name and org | A hit costs 15% of your data and shows a fact about the rival | ✅ |
-| Compute starvation | Compute bar | Boosting drains it and it regenerates slowly | ✅ |
-| Model collapse | Silver swarm of synthetic data (your own outputs) | Creature blurs and loses detail | Stage 2 |
-| Overfitting | Eating one type far past the recipe | Other stats decay | Stage 2 |
-| Reward hacking | Shiny fake reward orbs | Score goes up but alignment secretly drops | Stage 2 |
-| Jailbreakers | Eels that latch on and steer you | Shake them off; the Refusal Shell resists | Stage 3 |
-| Copyright lawsuits | Lawyer sharks near paywalled data | Drain compute; licensing-deal pickups grant immunity | Stage 3 |
-| Data wall | The ocean thins out late in the game | Forces synthetic data or licensing | Stage 4 |
+### 5. Storms: dangers that last only for a moment
+Timed hazards pinned to real incidents, lasting 30–90 seconds, with a countdown and a
+survive-it objective. Examples: ChatGPT "at capacity" outages (compute frozen), Italy's
+temporary ban (a region closes), the OpenAI board crisis (the five-day storm), the DeepSeek
+R1 shock (a cheap-rival tsunami), and the Claude path's export-control suspension. Surviving
+a storm grants a fact card; failing costs Users or Trust.
 
-## Art & tone
+### 6. Persistent dangers (always around, scaling by stage)
+Hallucinations ✅ · Toxic smog ✅ · Rival labs ✅ · Compute starvation ✅ · Model collapse
+(eating synthetic data you made) · Overfitting · Reward hacking · Jailbreakers ·
+Prompt-injection eels (Stage 4+) · Lawyer sharks (copyright) · Runaway agents (Stage 6+).
 
-Bioluminescent deep sea meets neural network: dark navy fog, bloom, and soft glowing particles.
-The player is a translucent cell whose orbiting neurons multiply with each version, and it
-grows physically as parameters grow. Rivals are spiky magenta icosahedrons.
+### 7. Consequences carry forward
+What you ate early can come back later. Example on the Claude path: eating "shadow-library"
+books in Stage 1 (they are cheap and plentiful) triggers the **authors' lawsuit** storm in
+Stage 6. It is based on the real 2025 case in which training on purchased books was ruled fair use
+and pirated copies were not, which ended in a ~$1.5B settlement.
+
+### 8. Think mode (Stage 5+)
+Hold THINK to slow time. While thinking, hallucinations turn grey and hidden paths appear.
+It costs compute per second, which teaches test-time compute: spend more, answer better.
+
+### 9. The Swarm (Stage 6+)
+- **Fork** sub-agents, which cost compute. They are boids that forage whatever data type you point them at.
+- **Orchestrate**: tap a target and your agents go get it.
+- **Agent Teams** upgrade: agents share targets and self-coordinate instead of reporting only to you.
+- **Swarm dangers**:
+  - **Runaway agents** wander into smog and pick up prompt injections, which spread between agents.
+  - **Cost blowups** drain compute.
+  - The **security-exposure storm** (modeled on OpenClaw's January 2026 incidents) leaks part of your swarm.
+- Spore tie-in: this is your "tribe → colonies" layer. You stop being one creature and become a system.
+
+### 10. Frontier gates (Stage 7)
+- The final evolution requires crossing a **capability threshold** *and* holding enough **Trust** and **Alignment**.
+- Crossing it too fast triggers restrictions: a phased rollout where only part of the world can reach you.
+- GPT finale: **GPT-6 Astra**, the first OpenAI model rated *Critical* for cybersecurity,
+  released in phases (🔎).
+- Claude finale: **Claude Opus 5.5** (🔎). Along the way you pass the restricted Mythos
+  models and Project Glasswing, where access is limited to defenders.
+- Ending card: a timeline recap of your run (your diet, the hypes you bet on, the storms you survived)
+  laid over the real history.
 
 ## Accuracy & naming rules
 
-- Every fact card line must be verifiable. Use conservative wording ("an estimated") where
-  figures are estimates.
-- Real company and model names appear only as historical facts. No logos, no impersonation.
+- Every fact card line must be verifiable. Mark facts: ✅ well-established · 🔎 recent;
+  verify against a primary source (lab announcement, system card, court filing) before shipping.
+- Use conservative wording for estimates ("an estimated 100M users").
+- Real company and model names appear only as historical facts. No logos, no impersonation,
+  and no invented quotes.
+- Political and legal events (bans, lawsuits, government disputes) are stated neutrally, as
+  facts with dates. The game never takes sides beyond what the record shows.
 - The title screen always shows the non-affiliation disclaimer.
+
+## Tech notes for the new systems
+
+- `src/config/models.ts` gains `lineage` and a `stage` value from 1 to 7. Claude forms go in a `CLAUDE_FORMS` list.
+- New `src/config/events.ts`: `{ id, kind: 'hype' | 'storm', lineage: 'gpt' | 'claude' | 'both',
+  atForm, durationSec, verdict?: 'lasting' | 'passing', effect, fact }`.
+- New `EventDirector`: schedules each event when the player enters its era and runs its effect.
+- The Timeline Current is a spline tube of instanced "post" quads with a flow field along it.
+- Swarm agents are boids that reuse `DataField.collect()`.
 
 ## Milestones
 
-1. **M1: Stage 1 slice** ✅: ocean, swimming (desktop + touch), diet system, GPT-1 → GPT-3,
-   hallucinations, smog, rivals, fact cards, save, and Pages deploy.
-2. **M2: Stage 2**: Codex and InstructGPT, the Alignment meter, the creature editor,
-   and the model collapse / overfitting / reward hacking dangers.
-3. **M3: Stage 3**: the ChatGPT launch, the user swarm, jailbreakers, lawyer sharks, and the GPT-4 teaser.
-4. **M4: Polish**: audio (synth ambient plus eat/evolve sounds), a timeline recap screen,
-   accessibility options, and a performance pass.
-5. **Later**: the Claude lineage (Constitutional AI, long-context tail, computer use) and
-   Stage 4 (Tools / Internet access).
+| # | Milestone | Contents |
+|---|---|---|
+| M1 ✅ | Stage 1 slice | Ocean, controls, diet, GPT-1 → GPT-3, hallucinations, smog, rivals, fact cards |
+| M2 | Stages 2–3 (GPT) | Codex, InstructGPT, ChatGPT, GPT-4; Alignment and Users meters; creature editor |
+| M3 | Event system | EventDirector, Hype Waves, Storms, the Timeline Current, the "Hype or shift?" verdicts |
+| M4 | Stages 4–5 (GPT) | Tool limbs, the internet biome, injection eels, Think mode, o1 → GPT-5 |
+| M5 | Stage 6 (GPT) | The Swarm: fork and orchestrate agents, agent-to-agent dangers |
+| M6 | Stage 7 (GPT) | Frontier gates, Trust meter, GPT-5.6 Sol → **GPT-6 Astra** finale and recap |
+| M7 | Claude lineage | `CLAUDE_FORMS` 1–7, Constitution food and meter, Claude-only storms → **Opus 5.5** |
+| M8 | Polish | Audio, accessibility, a performance pass, a fact-verification pass over every 🔎 |
